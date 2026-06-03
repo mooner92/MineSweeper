@@ -97,7 +97,7 @@ export default async function ReviewQueuePage({
                   )}
                 </div>
                 <p className="truncate text-sm font-semibold">
-                  {it.personName ?? it.filename ?? '문서'}
+                  {it.personName ?? it.flag.label ?? it.filename ?? '문서'}
                 </p>
                 <p className="text-xs text-fg-muted">
                   {it.applicantName ? (

@@ -1,9 +1,7 @@
-import type { Role, SourceRef } from '@/lib/domain';
-import { nameCompleteness, namesMatch, normalizeName } from '@/lib/names';
+import type { NameCandidate, Role, SourceRef } from '@/lib/domain';
+import { fuzzyMatchWithin, nameCompleteness, namesMatch, normalizeName } from '@/lib/names';
+import { computeNeedsHuman } from '@/lib/review-policy';
 import type { AggregatedPerson, PersonWithSource } from '@/lib/pipeline/types';
-
-/** Below this extraction confidence, a person is routed to human review. */
-const CONFIDENCE_THRESHOLD = 0.7;
 
 interface Group {
   members: PersonWithSource[];
@@ -13,26 +11,29 @@ interface Group {
   bestName: string;
   bestScore: number;
   isSelf: boolean;
-  needsHuman: boolean;
 }
 
 export interface AggregateOptions {
   /** Applicant name — matched persons are flagged is_self for auto-exclusion. */
   selfName?: string;
-  confidenceThreshold?: number;
 }
 
 /**
  * Stage 4 — collapse per-document occurrences into one row per real person.
  * Roles are unioned; provenance is collected; the applicant themself is flagged. Merging is
  * deliberately conservative (see names.namesMatch) so ambiguous names stay separate.
+ *
+ * Phase 1.5a additions:
+ *  - Near-duplicate detection: within the applicant's name set, names at edit-distance ≤1 of
+ *    the same script (e.g. 이주영 vs 이조영) are surfaced as `nameCandidates` for a human to
+ *    disambiguate. They are NOT auto-merged, and the row is forced to needsHuman.
+ *  - needsHuman is computed via the shared review-policy helper (same as worker/process.ts).
  */
 export function aggregate(
   persons: PersonWithSource[],
   options: AggregateOptions = {},
 ): AggregatedPerson[] {
   const { selfName } = options;
-  const threshold = options.confidenceThreshold ?? CONFIDENCE_THRESHOLD;
   const groups: Group[] = [];
 
   for (const p of persons) {
@@ -46,7 +47,6 @@ export function aggregate(
         bestName: p.nameRaw,
         bestScore: -1,
         isSelf: false,
-        needsHuman: false,
       };
       groups.push(group);
     }
@@ -71,13 +71,31 @@ export function aggregate(
       group.bestName = p.nameRaw;
     }
     if (p.isSelf) group.isSelf = true;
-    if (p.sourceKind !== 'printed' || p.confidence < threshold) group.needsHuman = true;
   }
 
-  return groups.map((g) => {
+  const canonicals = groups.map((g) => normalizeName(g.bestName));
+
+  return groups.map((g, idx) => {
+    const canonicalName = canonicals[idx];
+    // Gazetteer = the applicant's other canonical names; flag near-duplicates for review.
+    const near = fuzzyMatchWithin(
+      canonicalName,
+      canonicals.filter((_, i) => i !== idx),
+      1,
+    );
+    const ambiguous = near.length > 0;
+    const nameCandidates: NameCandidate[] = ambiguous
+      ? [
+          { name: canonicalName, score: 1 },
+          ...near.map((n) => ({ name: n.name, score: Math.max(0, 1 - n.distance * 0.15) })),
+        ]
+      : [];
+
     const isSelf =
       g.isSelf || (selfName ? g.members.some((m) => namesMatch(m.nameRaw, selfName)) : false);
-    const canonicalName = normalizeName(g.bestName);
+    const needsHuman =
+      ambiguous || g.members.some((m) => computeNeedsHuman(m.sourceKind, m.confidence));
+
     return {
       canonicalName,
       nameNormalized: canonicalName,
@@ -85,7 +103,8 @@ export function aggregate(
       sources: g.sources,
       affiliation: g.affiliation,
       isSelf,
-      needsHuman: g.needsHuman,
+      needsHuman,
+      nameCandidates,
     } satisfies AggregatedPerson;
   });
 }

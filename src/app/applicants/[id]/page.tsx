@@ -64,7 +64,14 @@ export default async function ApplicantPage({ params }: { params: { id: string }
             )}
             {people.map((p) => (
               <tr key={p.id} className="align-top">
-                <td className="px-4 py-3 font-semibold text-fg">{p.canonicalName}</td>
+                <td className="px-4 py-3 font-semibold text-fg">
+                  {p.canonicalName}
+                  {p.nameCandidates.length > 1 && (
+                    <span className="ml-2 align-middle text-xs font-normal text-warning">
+                      후보: {p.nameCandidates.map((c) => c.name).join(' / ')}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <RoleBadges roles={p.roles} />
                 </td>
@@ -88,7 +95,11 @@ export default async function ApplicantPage({ params }: { params: { id: string }
                   <FinalStatusBadge status={p.finalStatus} />
                 </td>
                 <td className="px-4 py-3">
-                  <PersonActions aggregateId={p.id} currentName={p.canonicalName} />
+                  <PersonActions
+                    aggregateId={p.id}
+                    currentName={p.canonicalName}
+                    candidates={p.nameCandidates}
+                  />
                 </td>
               </tr>
             ))}

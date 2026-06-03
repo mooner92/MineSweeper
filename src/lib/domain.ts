@@ -96,6 +96,12 @@ export interface Bbox {
   page?: number;
 }
 
+/** A name candidate for human disambiguation (n-best / near-duplicate). score: 0..1. */
+export interface NameCandidate {
+  name: string;
+  score: number;
+}
+
 /** Where an aggregated person was found — the provenance shown next to each name. */
 export interface SourceRef {
   documentId: string;
