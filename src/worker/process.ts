@@ -9,16 +9,16 @@ import {
 } from '@/db/schema';
 import type { FlagType, SourceKind } from '@/lib/domain';
 import { initialsForm, normalizeName } from '@/lib/names';
+import { REVIEW_THRESHOLDS, computeNeedsHuman } from '@/lib/review-policy';
 import type { Extractor } from '@/lib/pipeline/types';
 import { runPipeline, type PipelineFile } from '@/lib/pipeline/run';
-
-const HUMAN_REVIEW_CONFIDENCE = 0.7;
 
 function flagForKind(sourceKind: SourceKind, confidence: number): FlagType | null {
   if (sourceKind === 'seal') return 'seal';
   if (sourceKind === 'handwritten') return 'handwriting';
   if (sourceKind === 'signature') return 'signature';
-  if (confidence < HUMAN_REVIEW_CONFIDENCE) return 'low_confidence';
+  // Only printed reaches here (non-printed already flagged above); use its category threshold.
+  if (confidence < REVIEW_THRESHOLDS.printed) return 'low_confidence';
   return null;
 }
 
@@ -68,7 +68,7 @@ export async function processApplicant(
         .where(eq(documents.id, doc.documentId));
 
       for (const p of doc.persons) {
-        const needsHuman = p.sourceKind !== 'printed' || p.confidence < HUMAN_REVIEW_CONFIDENCE;
+        const needsHuman = computeNeedsHuman(p.sourceKind, p.confidence);
         const personId = crypto.randomUUID();
         await tx.insert(extractedPersons).values({
           id: personId,
@@ -84,6 +84,8 @@ export async function processApplicant(
           regionBbox: p.regionBbox ?? null,
           ocrEngine: p.ocrEngine ?? null,
           ocrConfidence: p.ocrConfidence ?? null,
+          nameCandidates: p.nameCandidates ?? null,
+          verificationStatus: p.verificationStatus ?? null,
           confidence: p.confidence,
           needsHuman,
           reviewStatus: 'pending',
@@ -124,11 +126,22 @@ export async function processApplicant(
         nameNormalized: agg.nameNormalized,
         roles: agg.roles,
         sources: agg.sources,
+        nameCandidates: agg.nameCandidates,
         affiliation: agg.affiliation ?? null,
         isSelf: agg.isSelf,
         needsHuman: agg.needsHuman,
         finalStatus: 'pending',
       });
+
+      // Near-duplicate names (e.g. 이주영 vs 이조영) — surface for human disambiguation.
+      if (agg.nameCandidates.length > 1) {
+        await tx.insert(reviewFlags).values({
+          applicantId,
+          flagType: 'ambiguous',
+          label: agg.nameCandidates.map((c) => c.name).join(' / '),
+          status: 'open',
+        });
+      }
     }
   });
 }

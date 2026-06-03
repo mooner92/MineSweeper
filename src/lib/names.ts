@@ -186,6 +186,59 @@ export function initialsForm(name: string): string | null {
   return null;
 }
 
+/**
+ * Levenshtein edit distance between two names (compared on their normalized forms).
+ * Note: this is intentionally SEPARATE from `namesMatch` — `namesMatch` stays strict
+ * (confident-only). Fuzzy distance is used to surface near-duplicate candidates to a human,
+ * never to auto-merge. editDistance('이주영','이조영') === 1.
+ */
+export function editDistance(a: string, b: string): number {
+  const s1 = normalizeName(a).replace(/\s+/g, '');
+  const s2 = normalizeName(b).replace(/\s+/g, '');
+  const m = s1.length;
+  const n = s2.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp: number[] = Array.from({ length: m + 1 }, (_, i) => i);
+  for (let j = 1; j <= n; j++) {
+    let prev = dp[0];
+    dp[0] = j;
+    for (let i = 1; i <= m; i++) {
+      const tmp = dp[i];
+      dp[i] = s1[i - 1] === s2[j - 1] ? prev : Math.min(prev, dp[i - 1], dp[i]) + 1;
+      prev = tmp;
+    }
+  }
+  return dp[m];
+}
+
+/**
+ * Among `candidates`, find names within [1, maxDist] edit distance of `name` and of the SAME
+ * script (no cross-script fuzzy). Excludes the name itself and exact duplicates (distance 0).
+ * Used to build human-disambiguation candidates for likely misreads/near-duplicates.
+ */
+export function fuzzyMatchWithin(
+  name: string,
+  candidates: string[],
+  maxDist = 1,
+): Array<{ name: string; distance: number }> {
+  const base = normalizeName(name);
+  const baseScript = detectScript(base);
+  const seen = new Set<string>();
+  const out: Array<{ name: string; distance: number }> = [];
+  for (const c of candidates) {
+    const cn = normalizeName(c);
+    if (cn === base || seen.has(cn)) continue;
+    if (detectScript(cn) !== baseScript) continue;
+    const d = editDistance(base, cn);
+    if (d >= 1 && d <= maxDist) {
+      out.push({ name: cn, distance: d });
+      seen.add(cn);
+    }
+  }
+  return out.sort((a, b) => a.distance - b.distance);
+}
+
 /** How complete a name is (3 = full, 2 = surname+initial, 1 = ambiguous). Used to pick a canonical. */
 export function nameCompleteness(name: string): number {
   const norm = normalizeName(name);

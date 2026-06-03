@@ -1,4 +1,13 @@
-import type { Bbox, DocType, Role, SourceFormat, SourceKind } from '@/lib/domain';
+import type {
+  Bbox,
+  DocType,
+  NameCandidate,
+  Role,
+  SourceFormat,
+  SourceKind,
+  SourceRef,
+  VerificationStatus,
+} from '@/lib/domain';
 
 /** A normalized page: text (may be empty) plus an optional image to view/extract from. */
 export interface PageBundle {
@@ -33,6 +42,10 @@ export interface RawPerson {
   regionBbox?: Bbox | null;
   ocrEngine?: string | null;
   ocrConfidence?: number | null;
+  /** Advisory cross-check result (printed anchor ↔ seal/signature). Never lowers needsHuman. */
+  verificationStatus?: VerificationStatus | null;
+  /** n-best / alternative readings of this name (engine n-best in 1.5b; empty in 1.5a stub). */
+  nameCandidates?: NameCandidate[];
   /** The snippet/line the name came from (provenance / debugging). */
   evidence?: string;
 }
@@ -66,8 +79,10 @@ export interface AggregatedPerson {
   canonicalName: string;
   nameNormalized: string;
   roles: Role[];
-  sources: import('@/lib/domain').SourceRef[];
+  sources: SourceRef[];
   affiliation: string | null;
   isSelf: boolean;
   needsHuman: boolean;
+  /** Disambiguation candidates (length > 1 ⇒ near-duplicate, human must pick). */
+  nameCandidates: NameCandidate[];
 }

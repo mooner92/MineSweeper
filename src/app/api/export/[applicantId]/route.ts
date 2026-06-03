@@ -28,6 +28,7 @@ export async function GET(req: Request, { params }: { params: { applicantId: str
       affiliation: r.affiliation,
       isSelf: r.isSelf,
       needsHuman: r.needsHuman,
+      nameCandidates: r.nameCandidates,
     }));
 
   if (format === 'xlsx') {
