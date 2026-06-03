@@ -6,12 +6,19 @@
 > **원칙: 결과를 맹신하지 않는다.** 자동 추출은 _초안_ 이며, 최종 판단은 항상 사람이 합니다. 추출기는
 > 문서에 실제로 있는 이름만 뽑고, 없으면 "없음"으로 둡니다(지어내지 않음).
 
+## 📊 진행 상황 / 계획
+
+- **[진척도(구현 현황)](./docs/progress.md)** — 2026-05-22 세종 미팅 요구사항 대비 무엇이 되고 안 되는지 한눈에
+- **[OCR 개선계획](./docs/improvement-plan-ocr.md)** — 도장·손글씨 OCR·신뢰도·오추출 교차검증(계획)
+- **[미팅 정리](./docs/meeting-2026-05-22-sejong.md)** · **[로드맵](./docs/roadmap.md)**
+
 ## 📚 문서
 
 상세 문서는 [`docs/`](./docs/README.md)에 있습니다.
 
 | 영역 | 문서 |
 |---|---|
+| 진행 / 계획 | [progress(진척도)](./docs/progress.md) · [improvement-plan-ocr](./docs/improvement-plan-ocr.md) · [meeting-2026-05-22-sejong](./docs/meeting-2026-05-22-sejong.md) |
 | 아키텍처 / 파이프라인 | [architecture](./docs/architecture.md) · [pipeline](./docs/pipeline.md) |
 | 추출기 / 이름 매칭 | [extractors](./docs/extractors.md) · [names-and-matching](./docs/names-and-matching.md) |
 | 데이터 / 워커 | [data-model](./docs/data-model.md) · [worker](./docs/worker.md) |

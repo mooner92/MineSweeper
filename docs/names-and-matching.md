@@ -567,8 +567,8 @@ export function parseApplicantFolder(folderName: string): ParsedFolder;
 
 - [pipeline.md](./pipeline.md) — 4단 파이프라인(Ingest→Type→Extract→Aggregate). 이 모듈은 마지막
   Aggregate 단계에서 후보 병합에 쓰인다. `tag` → `DOC_TYPES` 매핑, `FLAG_TYPES`(seal/signature 등)도 참조.
-- [aggregate](./aggregate.md) — `nameKey` 버킷팅 → `namesMatch` 확정 → `nameCompleteness` 기반
-  canonical 선택의 실제 호출 흐름.
+- [pipeline.md (Stage 4 Aggregate)](./pipeline.md) — `nameKey` 버킷팅 → `namesMatch` 확정 →
+  `nameCompleteness` 기반 canonical 선택의 실제 호출 흐름.
 - [data-model.md](./data-model.md) — 정규화된 이름과 키가 저장되는 컬럼/테이블 구조.
 
 > 마지막으로 다시 한번: **자동 추출·정규화·매칭은 모두 "초안"이며 최종 판단은 사람**이다.

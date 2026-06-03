@@ -10,6 +10,9 @@ Minesweeper — 채용 이해충돌 관계자 추출 시스템의 상세 문서 
 
 | 문서 | 내용 |
 |---|---|
+| [progress.md](./progress.md) | **진척도** — 2026-05-22 세종 미팅 요구사항 대비 구현 현황 매핑(✅/🟡/📋/⬜) |
+| [improvement-plan-ocr.md](./improvement-plan-ocr.md) | 도장·손글씨 **OCR 개선계획**(실신뢰도·abstain·오추출 교차검증, pending approval) |
+| [meeting-2026-05-22-sejong.md](./meeting-2026-05-22-sejong.md) | 세종국책연구단지 **미팅 정리**(요구사항 원천) |
 | [architecture.md](./architecture.md) | 시스템 개요, 4단 파이프라인, 두 축 분리 원칙, 데이터 흐름, 컴포넌트 맵, 기술스택 근거 |
 | [pipeline.md](./pipeline.md) | 4단 파이프라인 단계별 상세(Ingest/Type/Aggregate + 오케스트레이션), 확장 가이드 |
 | [extractors.md](./extractors.md) | Stage 3 교체 가능 추출기 — stub 휴리스틱 / 온프레 VLM 클라이언트 / 프롬프트 / 역할 매핑 / Ollama 셋업 |
