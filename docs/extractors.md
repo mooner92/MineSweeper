@@ -102,22 +102,25 @@ export interface RawPerson {
 추출기 선택은 `src/lib/pipeline/extract/index.ts` 의 단일 함수가 담당한다.
 
 ```ts
-/** Choose the Stage-3 extractor. Default "stub" (deterministic); "vlm" hits the on-prem model. */
+/** "stub"(기본) | "vlm"(단일 로컬 VLM) | "ensemble"(로컬 vLLM 다중 투표) */
 export function getExtractor(mode: string = process.env.EXTRACTOR_MODE ?? 'stub'): Extractor {
-  return mode === 'vlm' ? new VlmExtractor() : new StubExtractor();
+  if (mode === 'ensemble') return new EnsembleExtractor();
+  if (mode === 'vlm') return new VlmExtractor();
+  return new StubExtractor();
 }
 ```
 
 규칙은 간단하다.
 
 - `EXTRACTOR_MODE` 환경변수를 읽어 모드를 결정한다(인자로 직접 넘기면 그것이 우선).
-- `'vlm'` 일 때만 `VlmExtractor`, 그 외 **모든 값**(`'stub'`, 빈 값, 오타 포함)은 `StubExtractor` 로
-  폴백한다. 즉 잘못된 설정이 들어와도 결정론적 안전 경로로 떨어진다.
+- `'ensemble'` → `EnsembleExtractor`(§3b), `'vlm'` → `VlmExtractor`(§3), 그 외 **모든 값**(`'stub'`,
+  빈 값, 오타 포함)은 `StubExtractor` 로 폴백한다. 즉 잘못된 설정이 들어와도 결정론적 안전 경로로 떨어진다.
 - 기본값은 `'stub'`.
 
 ```mermaid
 flowchart LR
   ENV["EXTRACTOR_MODE"] --> F{getExtractor}
+  F -- "== 'ensemble'" --> E[EnsembleExtractor]
   F -- "== 'vlm'" --> V[VlmExtractor]
   F -- "그 외 모두" --> S[StubExtractor]
 ```
@@ -545,6 +548,33 @@ const person: RawPerson = {
 
 VLM 은 모델이 직접 `is_self` 를 주면 그것을 쓰고, 안 주면 `selfName` 과 `namesMatch` 로 보수적으로 판정한다
 (`p.is_self ?? namesMatch(...)`). 의미는 stub 의 §2.5 와 동일하다.
+
+---
+
+## 3b. `EnsembleExtractor` — 멀티모델 투표 (`EXTRACTOR_MODE=ensemble`)
+
+같은 문서를 **여러 로컬 vLLM 모델**(OpenAI 호환)에 한 번씩 보내 결과를 **투표**로 합칩니다. "모델 3개를
+돌려 확률 높은 걸 고르고 불일치는 걸러낸다"는 요구 구현 — 정밀도/필터링↑. 모든 추론 **로컬**, 외부 API
+미사용(`extract/ensemble.ts`).
+
+```ts
+ensembleConfigsFromEnv()                          // VLM_ENSEMBLE="baseUrl|model,..." → VlmConfig[]
+new EnsembleExtractor(configs, { minVotes, caller }) // caller 주입 → 목업 테스트
+```
+
+동작:
+1. N개 엔드포인트 **병렬 호출**(`extractFromVlmEndpoint` 공유). 한 곳 실패해도 진행(resilient).
+2. **`namesMatch`(엄격) 그룹핑** — 같은 이름에 동의한 모델 수 = `votes`.
+3. **`confidence = votes / N`**(3/3=1.0, 2/3≈0.67). 카테고리 임계값(`review-policy`)과 결합 → **강한
+   합의만 자동통과**, 나머지는 사람 검토(= 필터링).
+4. 그룹 내 표기 분기(`Galen Newman`/`G Newman`)는 `nameCandidates`로, 표시 이름은 **보고확률 최고치**.
+5. `namesMatch`로 안 묶이는 **근접 오독**(`이주영` vs `이조영`)은 하류 **aggregate gazetteer(1.5a)** 가
+   후보로 잡음 → 두 단계가 합쳐져 misread를 사람에게 노출.
+6. `VLM_ENSEMBLE_MIN_VOTES` 미만 득표 드롭(기본 1 = 유지, 저합의는 사람에게 — recall 보존).
+
+> **현황(라이브 보류)**: 코드·설정·단위테스트(`tests/ensemble.test.ts`, 목업 caller) 완비. 실제 모델
+> 다운로드/서빙은 서버 GPU가 공유 vLLM으로 가득 차 보류 — [serve-ocr.sh](../scripts/serve-ocr.sh),
+> [deployment.md](./deployment.md), 모델/도장 가능성은 [improvement-plan-ocr.md](./improvement-plan-ocr.md).
 
 ---
 

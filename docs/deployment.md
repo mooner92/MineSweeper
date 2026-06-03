@@ -208,6 +208,33 @@ curl -s "$VLM_BASE_URL/models" -H "Authorization: Bearer $VLM_API_KEY"
 
 > **원칙 재확인.** 자동추출은 **초안**이며 최종 판단은 사람이 한다. VLM은 이름을 **지어내지 않는다** — 불확실하면 플래그를 남기고 사람 검수로 넘긴다.
 
+### 3.4 로컬 vLLM 앙상블 (EXTRACTOR_MODE=ensemble)
+
+여러 OCR-VLM을 **로컬 vLLM**으로 띄워 투표(앙상블)합니다. 외부 API 없음.
+
+```bash
+# 1) 모델 캐시(디스크만, GPU 불필요)
+bash scripts/download-ocr-models.sh           # MODEL1/2/3 env 로 교체 가능
+
+# 2) 3개 vLLM OpenAI 서버 기동 (포트 8010/8011/8012) — 자유 VRAM 필요
+bash scripts/serve-ocr.sh                      # VRAM 부족/공유 점유 시 자동 abort
+
+# 3) 앙상블로 전환
+#   ecosystem.config.cjs(or .env): EXTRACTOR_MODE=ensemble,
+#   VLM_ENSEMBLE="http://localhost:8010/v1|MODEL1,http://localhost:8011/v1|MODEL2,http://localhost:8012/v1|MODEL3"
+pm2 restart minesweeper-worker --update-env
+```
+
+- 합의=신뢰도, 불일치=사람 검토(필터링). `VLM_ENSEMBLE_MIN_VOTES`로 저득표 드롭 가능(기본 1).
+- 권장 기본 모델: `Qwen/Qwen2.5-VL-7B-Instruct`, `OpenGVLab/InternVL3-8B`, `zai-org/GLM-4.1V-9B-Thinking`
+  — **vLLM 지원·한국어/도장 정확도는 실제 샘플로 검증 후 확정**(model-evaluation.md).
+- VRAM: 7–9B VLM ×3 ≈ **48–60GB** → A40 2장(92GB) 여유 시 충분. 한 장에 다 못 올리면 `GPU1/2/3`,
+  `VLM_GPU_UTIL`로 카드별 배치.
+
+> ⚠️ **이 서버 현황**: 2×A40이 **공유 vLLM(Qwen2.5-Coder-32B, 타 사용자, TP=2)** 으로 가득 차 있어
+> (카드당 ~6GB 여유) `serve-ocr.sh`는 지금 실행하면 abort합니다. 타 사용자 서비스를 종료하지 말고,
+> GPU 여유 확보(카드 반납/시간대 협의) 후 진행하세요.
+
 ---
 
 ## 4. GPU 고려사항
