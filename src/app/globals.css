@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* seed-design–inspired semantic tokens (light theme). */
+:root {
+  --seed-bg: #ffffff;
+  --seed-bg-layer: #f4f5f6;
+  --seed-bg-elevated: #ffffff;
+  --seed-fg: #212124;
+  --seed-fg-muted: #55585e;
+  --seed-fg-subtle: #909298;
+  --seed-fg-oncolor: #ffffff;
+  --seed-stroke: #e8eaed;
+  --seed-stroke-strong: #d1d4d9;
+  --seed-accent: #ff6f0f;
+  --seed-accent-pressed: #e25e00;
+  --seed-accent-subtle: #fff2e8;
+  --seed-success: #1f9254;
+  --seed-success-subtle: #e7f6ee;
+  --seed-warning: #a66b00;
+  --seed-warning-subtle: #fff5e0;
+  --seed-danger: #d92d20;
+  --seed-danger-subtle: #fdeceb;
+  --seed-font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
+    'Malgun Gothic', system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  body {
+    @apply bg-bg-layer text-fg antialiased;
+    font-family: var(--seed-font-sans);
+  }
+}
+
+@layer components {
+  .seed-card {
+    @apply rounded-seed-lg border border-stroke bg-bg;
+  }
+  .seed-btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-seed px-3.5 py-2 text-sm font-semibold transition-colors;
+  }
+  .seed-btn-primary {
+    @apply seed-btn bg-accent text-fg-oncolor hover:bg-accent-pressed disabled:opacity-50;
+  }
+  .seed-btn-neutral {
+    @apply seed-btn border border-stroke bg-bg text-fg hover:bg-bg-layer disabled:opacity-50;
+  }
+  .seed-btn-ghost {
+    @apply seed-btn text-fg-muted hover:bg-bg-layer;
+  }
+  .seed-badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+  .seed-badge-success {
+    @apply seed-badge bg-success-subtle text-success;
+  }
+  .seed-badge-warning {
+    @apply seed-badge bg-warning-subtle text-warning;
+  }
+  .seed-badge-neutral {
+    @apply seed-badge border border-stroke bg-bg-layer text-fg-muted;
+  }
+  .seed-badge-danger {
+    @apply seed-badge bg-danger-subtle text-danger;
+  }
+}
