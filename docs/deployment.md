@@ -231,9 +231,29 @@ pm2 restart minesweeper-worker --update-env
 - VRAM: 7–9B VLM ×3 ≈ **48–60GB** → A40 2장(92GB) 여유 시 충분. 한 장에 다 못 올리면 `GPU1/2/3`,
   `VLM_GPU_UTIL`로 카드별 배치.
 
-> ⚠️ **이 서버 현황**: 2×A40이 **공유 vLLM(Qwen2.5-Coder-32B, 타 사용자, TP=2)** 으로 가득 차 있어
-> (카드당 ~6GB 여유) `serve-ocr.sh`는 지금 실행하면 abort합니다. 타 사용자 서비스를 종료하지 말고,
-> GPU 여유 확보(카드 반납/시간대 협의) 후 진행하세요.
+### 3.5 단일 경량 VLM + 도장/서명 감지 (현재 운용) — `DETECT_MARKS`
+
+동시 3모델 앙상블은 VRAM 부담이 커서, 현재는 **단일 경량 VLM**으로 운용한다.
+
+```bash
+# GPU1(여유 카드)에 Qwen2.5-VL-7B 띄우기 (로컬, --api-key 임의값)
+CUDA_VISIBLE_DEVICES=1 /data/vllm/env/bin/vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
+  --served-model-name Qwen2.5-VL-7B-Instruct --port 8010 --api-key local \
+  --gpu-memory-utilization 0.5 --max-model-len 16384 --limit-mm-per-prompt '{"image":4}'
+
+# 앱 환경(ecosystem): EXTRACTOR_MODE=vlm(이미지 이름 OCR까지) 또는 stub(텍스트 이름) + 감지 on
+#   DETECT_MARKS=1  VLM_BASE_URL=http://localhost:8010/v1  VLM_API_KEY=local  VLM_MODEL=Qwen2.5-VL-7B-Instruct
+pm2 restart ecosystem.config.cjs --update-env
+# 라이브 스모크: npm run detect:smoke   (이름 추출 + 도장 bbox 감지)
+```
+
+- **감지(`DETECT_MARKS=1`)**: 관련 페이지 렌더 → VLM에 도장/서명 위치 질의 → 크롭 + 검토 큐(§extractors.md 3c).
+- GPU1 카드 1장이 비면(아래 systemd util 조정 참고) 7B VLM은 util 0.5(~23GB)로 넉넉히 올라간다.
+- **상시화**: 위 vllm 명령을 사용자 systemd 서비스로 등록하면(코더 서비스와 동일 패턴) 재부팅에도 유지된다.
+
+> ℹ️ **GPU 메모리 확보 팁**: 공유 코더 vLLM이 `--gpu-memory-utilization 0.85`로 카드를 선점하면 여유가
+> 거의 없다. 소유자가 해당 systemd 유닛의 util을 낮추거나(예: 0.55) TP=1로 한 카드에 몰면 다른 카드가
+> 통째로 빈다. **타 사용자 서비스는 종료/변경하지 말 것** — 본인 소유 서비스만 조정.
 
 ---
 
