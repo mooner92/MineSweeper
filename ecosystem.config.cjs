@@ -11,11 +11,15 @@ const env = {
   NODE_ENV: 'production',
   DATABASE_URL: 'file:./data/minesweeper.db',
   UPLOAD_DIR: './data/uploads',
-  EXTRACTOR_MODE: 'stub',
+  EXTRACTOR_MODE: 'stub', // 'stub' | 'vlm' | 'ensemble' (ensemble needs local vLLM servers — scripts/serve-ocr.sh)
   VLM_BASE_URL: 'http://localhost:11434/v1',
   VLM_API_KEY: 'ollama',
   VLM_MODEL: 'qwen3.5:9B',
   VLM_TIMEOUT_MS: '120000',
+  // Ensemble endpoints (used only when EXTRACTOR_MODE=ensemble). All LOCAL, no external API.
+  VLM_ENSEMBLE:
+    'http://localhost:8010/v1|Qwen/Qwen2.5-VL-7B-Instruct,http://localhost:8011/v1|OpenGVLab/InternVL3-8B,http://localhost:8012/v1|zai-org/GLM-4.1V-9B-Thinking',
+  VLM_ENSEMBLE_MIN_VOTES: '1',
   WORKER_POLL_INTERVAL_MS: '2000',
 };
 
