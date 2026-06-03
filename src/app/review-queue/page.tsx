@@ -54,7 +54,15 @@ export default async function ReviewQueuePage({
           {items.map((it) => (
             <li key={it.flag.id} className="seed-card overflow-hidden">
               <div className="relative aspect-[4/3] bg-bg-layer">
-                {it.documentId && it.sourceFormat === 'image' ? (
+                {it.flag.cropPath ? (
+                  // Detected seal/signature region — show the crop directly (human eyeballs it).
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/api/crop/${it.flag.id}`}
+                    alt="detected region"
+                    className="h-full w-full object-contain"
+                  />
+                ) : it.documentId && it.sourceFormat === 'image' ? (
                   <>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img

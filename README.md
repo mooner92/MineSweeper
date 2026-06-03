@@ -53,14 +53,19 @@
 | `vlm` | `extract/vlm.ts` | 단일 온프레 VLM(OpenAI 호환: 로컬 vLLM/Ollama) |
 | `ensemble` | `extract/ensemble.ts` | **로컬 vLLM 모델 3종을 투표**(합의=신뢰도, 불일치=사람에게). 정밀도/필터링↑ |
 
-`EXTRACTOR_MODE=vlm` 로 전환하면 `VLM_BASE_URL`(기본 `http://localhost:11434/v1`, 로컬 Ollama)의
-모델을 호출합니다. 텍스트가 없는 스캔 PDF/이미지(hindex)는 페이지 이미지를 함께 전송합니다.
+`EXTRACTOR_MODE=vlm` 로 전환하면 `VLM_BASE_URL`의 로컬 모델을 호출합니다. 스캔 PDF/이미지(hindex)는
+페이지 이미지를 함께 전송합니다.
 
-**앙상블(`ensemble`)**: `VLM_ENSEMBLE` 의 여러 로컬 vLLM 엔드포인트에 같은 문서를 보내 같은 이름에
-몇 개 모델이 동의하는지로 신뢰도(`votes/N`)를 매기고, 표기가 갈리면 후보로 사람에게 넘깁니다(외부 API 미사용).
-서버 기동은 [`scripts/serve-ocr.sh`](./scripts/serve-ocr.sh), 자세한 건 [docs/extractors.md](./docs/extractors.md)·[docs/deployment.md](./docs/deployment.md).
-> ⚠️ **라이브 보류**: 이 서버의 2×A40 GPU가 현재 **공유 vLLM(타 사용자)으로 가득 차** 모델 다운로드/서빙/실측은
-> GPU 여유 확보 후 가능합니다(코드·스크립트·테스트는 완비). 현황은 [docs/progress.md](./docs/progress.md).
+**도장/서명 감지(`DETECT_MARKS=1`)**: 인준/저자 페이지를 이미지로 렌더해 VLM에 **도장·서명·손글씨의
+위치(bbox)** 를 물어(글자는 안 읽음) **크롭 + 검토 큐**로 올립니다. "타이핑 없이 — 이름은 추출, 도장 있는
+문서만 골라 크롭으로 확인". `extract/detect.ts`·`worker/detect-marks.ts`, 크롭 서빙 `/api/crop/[flagId]`.
+
+**앙상블(`ensemble`)**: `VLM_ENSEMBLE` 의 여러 로컬 vLLM 엔드포인트로 투표(`votes/N`=신뢰도, 불일치→사람).
+서버 기동 [`scripts/serve-ocr.sh`](./scripts/serve-ocr.sh), 자세히는 [docs/extractors.md](./docs/extractors.md)·[docs/deployment.md](./docs/deployment.md).
+
+> ✅ **현재 라이브**: GPU1에 `Qwen2.5-VL-7B-Instruct` 를 vLLM(:8010)로 운용 중. 합성 인준서로 이름 추출 +
+> 도장 bbox 감지 + 크롭 생성까지 **end-to-end 동작 확인**. 실제 정확도는 합격자 샘플로 검증 예정. (동시 3모델
+> 앙상블은 VRAM 부담이라 지금은 단일 경량 모델 운용.) 현황: [docs/progress.md](./docs/progress.md).
 
 > 보안: 개인정보·논문 전문·인장을 다루므로 **외부 클라우드 API는 막힐 가능성이 큼** → 기본값은 온프레.
 > 도장·손글씨·판독난해 서명은 자동 추출을 약속하지 않고 **검토 필요 큐**로 모아 사람이 확인합니다.

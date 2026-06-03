@@ -12,10 +12,13 @@ const env = {
   DATABASE_URL: 'file:./data/minesweeper.db',
   UPLOAD_DIR: './data/uploads',
   EXTRACTOR_MODE: 'stub', // 'stub' | 'vlm' | 'ensemble' (ensemble needs local vLLM servers — scripts/serve-ocr.sh)
-  VLM_BASE_URL: 'http://localhost:11434/v1',
-  VLM_API_KEY: 'ollama',
-  VLM_MODEL: 'qwen3.5:9B',
+  // Local vLLM Qwen2.5-VL on GPU1 (scripts/serve-ocr or systemd). Used by DETECT_MARKS + vlm mode.
+  VLM_BASE_URL: 'http://localhost:8010/v1',
+  VLM_API_KEY: 'local',
+  VLM_MODEL: 'Qwen2.5-VL-7B-Instruct',
   VLM_TIMEOUT_MS: '120000',
+  // Seal/signature/handwriting detection (renders relevant pages → VLM locates marks → crop + flag).
+  DETECT_MARKS: '1',
   // Ensemble endpoints (used only when EXTRACTOR_MODE=ensemble). All LOCAL, no external API.
   VLM_ENSEMBLE:
     'http://localhost:8010/v1|Qwen/Qwen2.5-VL-7B-Instruct,http://localhost:8011/v1|OpenGVLab/InternVL3-8B,http://localhost:8012/v1|zai-org/GLM-4.1V-9B-Thinking',

@@ -39,10 +39,11 @@
 | 미팅 요구 | 상태 | 근거 / 메모 |
 |---|---|---|
 | **타이핑 텍스트** PDF에서 추출 | ✅ | `ingest/pdf.ts` 텍스트레이어 추출(pdfjs) → LLM/휴리스틱 추출 |
-| **필기체(한글)** 추출 | 🟡 | 현재 **감지→검토 큐로만**(OCR 없음). OCR은 [개선계획 1.5b](./improvement-plan-ocr.md) |
+| 도장/서명/필기체 **위치 감지** | ✅ | 로컬 vLLM(Qwen2.5-VL)로 **"있다/어디" 감지**→크롭→검토 큐(`DETECT_MARKS=1`). 라이브 확인됨 |
+| **필기체(한글) 글자 읽기** | 🟡 | 감지는 됨(위). 전서체/손글씨 *인식*은 자동확정 금지·검출→사람(설계상). 정식 OCR은 [개선계획](./improvement-plan-ocr.md) |
 | 영문 이름 → **한글 여러 개 병기** | 🟡 | 1.5a 구현: 근접중복(editDist≤1) `nameCandidates` + 검토 UI 후보 드롭다운(`이주영`↔`이조영` 자동병합 없이 사람이 선택). 엔진 n-best(VLM 다중 한글표기)는 1.5b |
 | **한자 논문 앞 페이지**만 처리 | 🟡 | 학위논문은 표지/앞 1–2p만 파싱(`extractThesis`). 한자 전용 라우팅은 미세조정 여지 |
-| 스캔 PDF / 이미지(hindex) OCR | 🟡 | 감지→`needs_vision` 큐로만(이름 미생성). 비전 추출은 개선계획 |
+| 스캔 PDF / 이미지(hindex) OCR | 🟡 | 도장/서명 감지는 라이브 동작. 이미지 *이름 OCR*은 `EXTRACTOR_MODE=vlm`로 켜면 동작(라이브 확인), 기본은 stub |
 
 ### 심사위원 풀 / 소속
 
@@ -84,18 +85,21 @@
 - ✅ 명단 내보내기(CSV/Excel) · ✅ 51 테스트 green · ✅ PM2 배포(:3100)
 - 🟡 VLM(vision) 경로 와이어드이나 **실데이터 미검증** · 🟡 한자/앞페이지 미세조정 여지
 
-### Phase 1.5 — 어려운 영역 OCR  🟡 `███░░░░░░░` (1.5a 구현, 1.5b/c 계획)
+### Phase 1.5 — 어려운 영역 OCR  🟡 `█████░░░░░` (1.5a + 도장/서명 감지 라이브, OCR·앙상블은 부분)
 - ✅ **1.5a(텍스트 기반, 모델/의존성/런타임 추가 0)**: 공유 폼체크 헬퍼(`form-check.ts`),
   이름 퍼지(`editDistance`/`fuzzyMatchWithin`) + gazetteer 근접중복 → `nameCandidates`(검토 UI
   후보 드롭다운, 자동병합 금지), 카테고리별 임계값 + **confirmed-is-advisory 불변식**(공유
   `review-policy.computeNeedsHuman`, 두 사이트), 자기보고 confidence=advisory, `crossCheck` 스켈레톤
   (비-thesis NO-OP), `scripts/eval.ts` 검토량 baseline(`npm run eval`). 69 테스트 green.
-- 🟡 **멀티모델 앙상블(vLLM, 로컬)**: `EnsembleExtractor`(`extract/ensemble.ts`) + 투표/후보 +
-  `serve-ocr.sh`/`download-ocr-models.sh` + 단위테스트(목업) **코드 완비**. ⚠️ **라이브 보류** — 이 서버
-  2×A40이 공유 vLLM(타 사용자)으로 점유되어 모델 서빙/실측은 GPU 여유 확보 후. 도장 인식은 전서체
-  난이도로 자동확정 금지·검출→사람 권고(라이브 확인은 GPU+샘플 필요).
-- 📋 **1.5b/1.5c**: 전용 OCR 사이드카 + 래스터/크롭 + per-char score + printed↔seal 교차검증, 도장
-  트랙·평가 플라이휠 — [개선계획](./improvement-plan-ocr.md), go/no-go 게이트 통과 시 착수.
+- ✅ **도장/서명/손글씨 감지(로컬 vLLM, 라이브 동작 확인)**: GPU1에 **Qwen2.5-VL-7B-Instruct**를
+  vLLM(:8010)로 띄우고, 관련 페이지를 이미지로 렌더(`render.ts`, pdf-to-img+@napi-rs/canvas) → VLM에
+  **"도장/서명 위치(bbox)"를 질의**(`extract/detect.ts`, 글자는 안 읽음) → bbox 크롭 → `review_flags`(crop)
+  로 검토 큐에 노출(`worker/detect-marks.ts`, `DETECT_MARKS=1`). 스모크/E2E 라이브 통과: 합성 인준서에서
+  이름 3건 추출 + 도장 bbox(0.75,0.24) 정확 감지 + 크롭 파일 생성. 크롭 서빙 `/api/crop/[flagId]`.
+- 🟡 **멀티모델 앙상블(vLLM, 로컬)**: `EnsembleExtractor` + 투표/후보 + 서빙 스크립트 + 목업 테스트 코드
+  완비. 동시 3모델은 VRAM 부담이라 현재는 **단일 경량 모델(Qwen2.5-VL-7B)** 로 운용, 앙상블은 여유 시 옵션.
+- 📋 **1.5b/1.5c(잔여)**: 도장 *인식*(전서체)은 자동확정 금지·검출→사람 유지, 전용 per-char score·
+  printed↔seal 교차검증·평가 플라이휠은 [개선계획](./improvement-plan-ocr.md) 따라 단계 진행.
 
 ### Phase 2 — 확장  ⬜ `░░░░░░░░░░`
 - ⬜ 소속 자동검색 · ⬜ 내부직원 관계(조직/인사 데이터) · ⬜ 인사혁신처 DB(Computer Use) · ⬜ HWP/HWPX
