@@ -578,6 +578,28 @@ new EnsembleExtractor(configs, { minVotes, caller }) // caller 주입 → 목업
 
 ---
 
+## 3c. 도장/서명/손글씨 감지 (`DETECT_MARKS=1`) — 라이브
+
+추출기와 별개로, 워커가 **마크 감지** 단계를 돈다. 핵심은 **감지 ≠ 인식**: 도장 글자를 읽지 않고
+"있다/어디 있다"만 찾아 사람에게 크롭으로 넘긴다(전서체는 사람도 못 읽으므로 자동확정 금지).
+
+흐름(`worker/detect-marks.ts` → `pipeline/render.ts` + `extract/detect.ts`):
+1. **관련 페이지만 렌더** — 학위논문은 1~2p(인준/표지), 그 외 1p, 이미지는 그 자체. PDF→PNG는
+   `pdf-to-img`+`@napi-rs/canvas`(프리빌트, 시스템 의존성 없음). 전체 페이지 OCR 안 함 → 빠름.
+2. **VLM에 위치 질의** — `detectMarks(cfg, pngPath)` 가 로컬 VLM에 "도장/서명/손글씨 bbox(0~1)+종류"를
+   JSON으로 요청(글자 미판독). 실패해도 빈 결과로 graceful.
+3. **크롭 + 플래그** — 각 mark bbox를 잘라 `data/.../crops/`에 저장하고 `review_flags`(flagType=seal/
+   signature/handwriting, `cropPath`)로 검토 큐에 노출. 크롭 서빙은 `/api/crop/[flagId]`.
+
+설정: `DETECT_MARKS=1` + `VLM_MODEL`/`VLM_BASE_URL`(로컬 vLLM). 기본 off(테스트/stub 무영향, 네이티브
+렌더러는 켜질 때만 동적 import). 단위테스트 `tests/detect-marks.test.ts`(주입형 render/detect/crop),
+라이브 스모크 `npm run detect:smoke`.
+
+> **라이브 확인**: GPU1의 `Qwen2.5-VL-7B-Instruct`(vLLM :8010)로 합성 인준서에서 이름 3건 + 도장
+> bbox(0.75,0.24) 감지 + 크롭 생성까지 end-to-end 통과.
+
+---
+
 ## 4. `prompts.ts` — 문서유형별 프롬프트와 공통 규칙
 
 `src/lib/pipeline/extract/prompts.ts` 의 `buildExtractionPrompt(docType, text, selfName)` 는

@@ -7,9 +7,10 @@ import {
   personAggregates,
   reviewFlags,
 } from '@/db/schema';
-import type { FlagType, SourceKind } from '@/lib/domain';
+import type { DocumentMark, FlagType, SourceKind } from '@/lib/domain';
 import { initialsForm, normalizeName } from '@/lib/names';
 import { REVIEW_THRESHOLDS, computeNeedsHuman } from '@/lib/review-policy';
+import type { DocResult } from '@/lib/pipeline/run';
 import type { Extractor } from '@/lib/pipeline/types';
 import { runPipeline, type PipelineFile } from '@/lib/pipeline/run';
 
@@ -20,6 +21,31 @@ function flagForKind(sourceKind: SourceKind, confidence: number): FlagType | nul
   // Only printed reaches here (non-printed already flagged above); use its category threshold.
   if (confidence < REVIEW_THRESHOLDS.printed) return 'low_confidence';
   return null;
+}
+
+/**
+ * Opt-in seal/signature DETECTION (DETECT_MARKS=1 + a VLM model configured). Renders relevant
+ * pages and asks the local VLM where stamps/signatures are — it does NOT read them. Dynamically
+ * imported so the default (stub) path never loads the native canvas/pdf renderer. Resilient:
+ * any failure yields no marks rather than aborting the job.
+ */
+async function detectMarksIfEnabled(docs: DocResult[]): Promise<Map<string, DocumentMark[]>> {
+  if (process.env.DETECT_MARKS !== '1' || !process.env.VLM_MODEL) return new Map();
+  try {
+    const { runMarkDetection } = await import('./detect-marks');
+    return await runMarkDetection(
+      docs.map((d) => ({
+        documentId: d.documentId,
+        filepath: d.filepath,
+        docType: d.docType,
+        format: d.ingest.format,
+      })),
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[detect-marks] skipped:', err instanceof Error ? err.message : err);
+    return new Map();
+  }
 }
 
 /**
@@ -46,6 +72,9 @@ export async function processApplicant(
   }));
 
   const result = await runPipeline(files, { applicantName: applicant.name, extractor });
+
+  // Detect seal/signature/handwriting regions (opt-in, before the tx — slow I/O outside the txn).
+  const marksByDoc = await detectMarksIfEnabled(result.documents);
 
   // Replace the applicant's results atomically: a mid-run failure must not leave the roster
   // half-rebuilt. (libsql/Drizzle transaction.)
@@ -114,6 +143,19 @@ export async function processApplicant(
           documentId: doc.documentId,
           flagType: 'needs_vision',
           label: doc.ingest.note ?? null,
+          status: 'open',
+        });
+      }
+
+      // Detected seal/signature/handwriting regions → review flags with crop (human eyeballs it).
+      for (const mark of marksByDoc.get(doc.documentId) ?? []) {
+        const pct = mark.confidence != null ? ` (${Math.round(mark.confidence * 100)}%)` : '';
+        await tx.insert(reviewFlags).values({
+          applicantId,
+          documentId: doc.documentId,
+          flagType: mark.type,
+          cropPath: mark.cropPath ?? null,
+          label: `p.${mark.page}${pct}`,
           status: 'open',
         });
       }

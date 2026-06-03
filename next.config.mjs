@@ -9,6 +9,8 @@ const nextConfig = {
       'pdfjs-dist',
       'exceljs',
       'adm-zip',
+      'pdf-to-img',
+      '@napi-rs/canvas',
     ],
   },
   // Type safety is enforced via `npm run typecheck`; ESLint is run separately so a missing

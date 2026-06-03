@@ -102,6 +102,20 @@ export interface NameCandidate {
   score: number;
 }
 
+/**
+ * A non-printed mark DETECTED on a page (not read). The system flags "there is a seal/signature
+ * here" + where, so a human can eyeball the crop — it does NOT try to read 전서체 seals.
+ */
+export interface DocumentMark {
+  type: 'seal' | 'signature' | 'handwriting';
+  /** Normalized 0..1 region on the page image. */
+  bbox: Bbox;
+  page: number;
+  confidence?: number | null;
+  /** Path to the cropped region image (filled by the worker after cropping). */
+  cropPath?: string | null;
+}
+
 /** Where an aggregated person was found — the provenance shown next to each name. */
 export interface SourceRef {
   documentId: string;
