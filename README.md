@@ -83,6 +83,57 @@ npm run dev:all               # 웹(:3000) + 워커 동시 기동
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | vitest (파이프라인 전 구간) |
 
+> 개발은 `dev:all`(웹 `:3000` + 워커), 프로덕션은 아래 PM2로 운영합니다.
+
+## 프로덕션 배포 (PM2 + Cloudflare Tunnel)
+
+빌드 후 **PM2**로 웹·워커를 함께 관리합니다. 프로세스 정의는 [`ecosystem.config.cjs`](./ecosystem.config.cjs)에 있습니다.
+
+```bash
+npm install
+npm run build
+npm run db:migrate
+pm2 start ecosystem.config.cjs   # minesweeper-web(:3100) + minesweeper-worker
+pm2 save                         # 프로세스 목록 저장(재시작 복구)
+# (선택) 부팅 자동시작: pm2 startup → 출력되는 sudo 명령 실행 후 pm2 save
+```
+
+| 명령 | 설명 |
+|---|---|
+| `pm2 status` | 프로세스 상태 |
+| `pm2 logs minesweeper-web` / `pm2 logs minesweeper-worker` | 로그 (파일은 `data/logs/`) |
+| `pm2 restart minesweeper-web` | 재시작 |
+| `MINESWEEPER_PORT=<포트> pm2 restart ecosystem.config.cjs --update-env` | 포트 변경 |
+
+- 기본 포트 **3100** (`PORT` / `MINESWEEPER_PORT`). 로컬 확인: `http://localhost:3100`
+- 추출기 전환: `ecosystem.config.cjs`의 `EXTRACTOR_MODE`를 `stub`→`vlm`(온프레 Ollama) 후 `pm2 restart minesweeper-worker`
+
+### Cloudflare Tunnel
+
+로컬 서비스 `http://localhost:3100`을 도메인에 연결:
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create minesweeper
+cloudflared tunnel route dns minesweeper <도메인>      # 예: minesweeper.example.com
+```
+
+`~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: minesweeper
+credentials-file: /home/<user>/.cloudflared/<TUNNEL-UUID>.json
+ingress:
+  - hostname: <도메인>
+    service: http://localhost:3100
+  - service: http_status:404
+```
+
+실행: `cloudflared tunnel run minesweeper` (상시화는 `sudo cloudflared service install`). 도메인 없이 빠른 테스트는 `cloudflared tunnel --url http://localhost:3100`.
+
+> ⚠️ **자체 인증이 없습니다(Phase 1).** 터널을 그대로 공개하면 지원자 PII가 노출됩니다. 반드시 해당 hostname에
+> **Cloudflare Access(Zero Trust)** 정책을 걸어 접근을 제한하세요. 자세한 내용: [docs/deployment.md](./docs/deployment.md) · [docs/security.md](./docs/security.md)
+
 ## 검토 UI
 
 1. **업로드** — zip 업로드 → 추출 시작, 진행률 폴링.

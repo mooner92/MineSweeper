@@ -67,37 +67,27 @@ npx concurrently -n web,worker -c blue,green \
   "tsx src/worker/index.ts"
 ```
 
-**옵션 B — `pm2` (권장: 자동 재시작·로그·부팅 등록).**
+**옵션 B — `pm2` (권장: 자동 재시작·로그·상시 운영).**
 
-`ecosystem.config.cjs`:
-
-```js
-module.exports = {
-  apps: [
-    {
-      name: 'minesweeper-web',
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start',
-      env: { NODE_ENV: 'production', PORT: '3000' },
-    },
-    {
-      name: 'minesweeper-worker',
-      script: 'node_modules/.bin/tsx',
-      args: 'src/worker/index.ts',
-      env: { NODE_ENV: 'production' },
-    },
-  ],
-};
-```
+저장소에 실제 [`ecosystem.config.cjs`](../ecosystem.config.cjs)가 포함돼 있다 — web(`:3100`) + worker, env·로그 경로(`data/logs/`)까지 정의돼 있다.
 
 ```bash
-pm2 start ecosystem.config.cjs
-pm2 save                 # 현재 프로세스 목록 저장
-pm2 startup              # 부팅 시 자동 기동 등록 (출력된 명령 실행)
+npm run build
+pm2 start ecosystem.config.cjs   # minesweeper-web(:3100) + minesweeper-worker
+pm2 save                         # 프로세스 목록 저장(재시작 복구)
+pm2 startup                      # (선택) 부팅 자동기동 — 출력된 sudo 명령 실행 후 pm2 save
 pm2 logs minesweeper-worker
 ```
 
-> 환경변수는 `ecosystem.config.cjs`의 `env` 블록 또는 셸 export / `.env` 로 주입한다. 두 앱 모두 동일한 `DATABASE_URL`·`UPLOAD_DIR`을 보게 하라.
+| 명령 | 설명 |
+|---|---|
+| `pm2 status` | 프로세스 상태 |
+| `pm2 restart minesweeper-web` | 재시작 |
+| `MINESWEEPER_PORT=<포트> pm2 restart ecosystem.config.cjs --update-env` | 포트 변경 |
+
+- 기본 포트 **3100** (`PORT` / `MINESWEEPER_PORT`). 로그 파일은 `data/logs/`.
+- env(`DATABASE_URL`·`UPLOAD_DIR`·`EXTRACTOR_MODE`·`VLM_*`)는 `ecosystem.config.cjs`의 `env` 블록에 정의돼 두 앱이 동일하게 본다.
+- 추출기 전환: `EXTRACTOR_MODE`를 `stub`→`vlm` 후 `pm2 restart minesweeper-worker`.
 
 ### 1.3 워커의 동작 모델
 
@@ -304,5 +294,43 @@ npm run typecheck      # tsc --noEmit  → 0 errors
 npm test               # vitest run    → 51 tests
 npm run build          # next build    → 0 errors
 ```
+
+## 7. Cloudflare Tunnel (외부 도메인 연결)
+
+PM2로 띄운 로컬 서비스(`http://localhost:3100`)를 `cloudflared`로 도메인에 연결한다.
+
+**명명 터널 (도메인 + 상시):**
+
+```bash
+cloudflared tunnel login                              # CF 계정 인증(브라우저)
+cloudflared tunnel create minesweeper                 # 터널 + 자격증명 파일 생성
+cloudflared tunnel route dns minesweeper <도메인>      # 예: minesweeper.example.com
+```
+
+`~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: minesweeper
+credentials-file: /home/<user>/.cloudflared/<TUNNEL-UUID>.json
+ingress:
+  - hostname: <도메인>
+    service: http://localhost:3100
+  - service: http_status:404
+```
+
+```bash
+cloudflared tunnel run minesweeper        # 실행
+sudo cloudflared service install           # (선택) systemd 상시 등록
+```
+
+**빠른 테스트 (도메인·로그인 불필요, 임시 *.trycloudflare.com URL):**
+
+```bash
+cloudflared tunnel --url http://localhost:3100
+```
+
+> ⚠️ **인증 경계 필수.** 이 앱은 Phase 1이라 자체 인증이 없다(§[security.md](./security.md)). 터널 hostname을 그대로
+> 공개하면 지원자 PII가 노출되므로, 반드시 **Cloudflare Access(Zero Trust)** 정책을 그 hostname에 적용해
+> 이메일/조직 단위로 접근을 제한하라. 포트(3100)는 외부에 직접 개방하지 말고 터널 경유로만 노출한다.
 
 > **보안 경고(재게시).** Phase 1에는 **내장 인증이 없다.** 리소스는 id로 주소화되므로 서버에 도달할 수 있는 누구나 지원자 PII를 읽을 수 있다. 반드시 **사내망 또는 인증을 강제하는 리버스 프록시 뒤**에 두고, **공개 인터넷에 노출하지 마라.** 자세한 위협 모델과 완화책은 [security.md](./security.md) 참조. 개발 워크플로(테스트·시드·로컬 실행)는 [development.md](./development.md)에 있다.
