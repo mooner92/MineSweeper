@@ -50,10 +50,17 @@
 | 모드 | 구현 | 용도 |
 |---|---|---|
 | `stub` (기본) | `extract/stub.ts` | 결정적 휴리스틱. GPU 불필요, **모든 테스트가 사용** |
-| `vlm` | `extract/vlm.ts` | 온프레 VLM(OpenAI 호환: vLLM/Ollama). 운영 경로 |
+| `vlm` | `extract/vlm.ts` | 단일 온프레 VLM(OpenAI 호환: 로컬 vLLM/Ollama) |
+| `ensemble` | `extract/ensemble.ts` | **로컬 vLLM 모델 3종을 투표**(합의=신뢰도, 불일치=사람에게). 정밀도/필터링↑ |
 
 `EXTRACTOR_MODE=vlm` 로 전환하면 `VLM_BASE_URL`(기본 `http://localhost:11434/v1`, 로컬 Ollama)의
 모델을 호출합니다. 텍스트가 없는 스캔 PDF/이미지(hindex)는 페이지 이미지를 함께 전송합니다.
+
+**앙상블(`ensemble`)**: `VLM_ENSEMBLE` 의 여러 로컬 vLLM 엔드포인트에 같은 문서를 보내 같은 이름에
+몇 개 모델이 동의하는지로 신뢰도(`votes/N`)를 매기고, 표기가 갈리면 후보로 사람에게 넘깁니다(외부 API 미사용).
+서버 기동은 [`scripts/serve-ocr.sh`](./scripts/serve-ocr.sh), 자세한 건 [docs/extractors.md](./docs/extractors.md)·[docs/deployment.md](./docs/deployment.md).
+> ⚠️ **라이브 보류**: 이 서버의 2×A40 GPU가 현재 **공유 vLLM(타 사용자)으로 가득 차** 모델 다운로드/서빙/실측은
+> GPU 여유 확보 후 가능합니다(코드·스크립트·테스트는 완비). 현황은 [docs/progress.md](./docs/progress.md).
 
 > 보안: 개인정보·논문 전문·인장을 다루므로 **외부 클라우드 API는 막힐 가능성이 큼** → 기본값은 온프레.
 > 도장·손글씨·판독난해 서명은 자동 추출을 약속하지 않고 **검토 필요 큐**로 모아 사람이 확인합니다.

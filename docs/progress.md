@@ -90,9 +90,12 @@
   후보 드롭다운, 자동병합 금지), 카테고리별 임계값 + **confirmed-is-advisory 불변식**(공유
   `review-policy.computeNeedsHuman`, 두 사이트), 자기보고 confidence=advisory, `crossCheck` 스켈레톤
   (비-thesis NO-OP), `scripts/eval.ts` 검토량 baseline(`npm run eval`). 69 테스트 green.
-- 📋 **1.5b/1.5c**: 전용 OCR 사이드카(ko-trocr/PaddleOCR-VL) + 래스터/크롭 + per-char score +
-  printed↔seal 교차검증, 도장 트랙·평가 플라이휠 — [개선계획](./improvement-plan-ocr.md), go/no-go
-  게이트 통과 시 착수(pending approval)
+- 🟡 **멀티모델 앙상블(vLLM, 로컬)**: `EnsembleExtractor`(`extract/ensemble.ts`) + 투표/후보 +
+  `serve-ocr.sh`/`download-ocr-models.sh` + 단위테스트(목업) **코드 완비**. ⚠️ **라이브 보류** — 이 서버
+  2×A40이 공유 vLLM(타 사용자)으로 점유되어 모델 서빙/실측은 GPU 여유 확보 후. 도장 인식은 전서체
+  난이도로 자동확정 금지·검출→사람 권고(라이브 확인은 GPU+샘플 필요).
+- 📋 **1.5b/1.5c**: 전용 OCR 사이드카 + 래스터/크롭 + per-char score + printed↔seal 교차검증, 도장
+  트랙·평가 플라이휠 — [개선계획](./improvement-plan-ocr.md), go/no-go 게이트 통과 시 착수.
 
 ### Phase 2 — 확장  ⬜ `░░░░░░░░░░`
 - ⬜ 소속 자동검색 · ⬜ 내부직원 관계(조직/인사 데이터) · ⬜ 인사혁신처 DB(Computer Use) · ⬜ HWP/HWPX
