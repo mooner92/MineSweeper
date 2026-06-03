@@ -12,7 +12,7 @@
 |---|---|---|---|
 | **Phase 0** | 준비(보안 결정·GPU·샘플·파일럿) | 🟡 부분 | `████░░░░░░` 40% |
 | **Phase 1** | MVP — PDF에서 이름 자동추출 + 검토 UI | ✅ 완료·배포 | `█████████░` 90% |
-| **Phase 1.5** | 어려운 영역(도장·손글씨) OCR·신뢰도·교차검증 | 📋 계획 수립 | `░░░░░░░░░░` 0% (구현) |
+| **Phase 1.5** | 어려운 영역 OCR·신뢰도·교차검증 | 🟡 1.5a 구현 | `███░░░░░░░` ~30% (1.5a 완료, 1.5b/c 계획) |
 | **Phase 2** | 소속 자동검색·내부직원 데이터·인사혁신처 DB | ⬜ 미착수 | `░░░░░░░░░░` 0% |
 
 > **요약:** 미팅의 1단계 목표 **"타이핑 없이 눈으로만 확인"** 은 **타이핑 텍스트(텍스트레이어 PDF)
@@ -40,7 +40,7 @@
 |---|---|---|
 | **타이핑 텍스트** PDF에서 추출 | ✅ | `ingest/pdf.ts` 텍스트레이어 추출(pdfjs) → LLM/휴리스틱 추출 |
 | **필기체(한글)** 추출 | 🟡 | 현재 **감지→검토 큐로만**(OCR 없음). OCR은 [개선계획 1.5b](./improvement-plan-ocr.md) |
-| 영문 이름 → **한글 여러 개 병기** | 📋 | 미구현. n-best `nameCandidates`로 [개선계획 1.5a](./improvement-plan-ocr.md)에 설계 (영문 원문 보존은 현재도 됨) |
+| 영문 이름 → **한글 여러 개 병기** | 🟡 | 1.5a 구현: 근접중복(editDist≤1) `nameCandidates` + 검토 UI 후보 드롭다운(`이주영`↔`이조영` 자동병합 없이 사람이 선택). 엔진 n-best(VLM 다중 한글표기)는 1.5b |
 | **한자 논문 앞 페이지**만 처리 | 🟡 | 학위논문은 표지/앞 1–2p만 파싱(`extractThesis`). 한자 전용 라우팅은 미세조정 여지 |
 | 스캔 PDF / 이미지(hindex) OCR | 🟡 | 감지→`needs_vision` 큐로만(이름 미생성). 비전 추출은 개선계획 |
 
@@ -84,9 +84,15 @@
 - ✅ 명단 내보내기(CSV/Excel) · ✅ 51 테스트 green · ✅ PM2 배포(:3100)
 - 🟡 VLM(vision) 경로 와이어드이나 **실데이터 미검증** · 🟡 한자/앞페이지 미세조정 여지
 
-### Phase 1.5 — 어려운 영역 OCR  📋 `░░░░░░░░░░` (계획 완료, 구현 0%)
-- 📋 [개선계획](./improvement-plan-ocr.md): 실신뢰도·abstain·n-best·교차검증·전용 OCR(ko-trocr/
-  PaddleOCR-VL 등) — Planner→Architect→Critic 합의 완료, **승인/구현 대기(pending approval)**
+### Phase 1.5 — 어려운 영역 OCR  🟡 `███░░░░░░░` (1.5a 구현, 1.5b/c 계획)
+- ✅ **1.5a(텍스트 기반, 모델/의존성/런타임 추가 0)**: 공유 폼체크 헬퍼(`form-check.ts`),
+  이름 퍼지(`editDistance`/`fuzzyMatchWithin`) + gazetteer 근접중복 → `nameCandidates`(검토 UI
+  후보 드롭다운, 자동병합 금지), 카테고리별 임계값 + **confirmed-is-advisory 불변식**(공유
+  `review-policy.computeNeedsHuman`, 두 사이트), 자기보고 confidence=advisory, `crossCheck` 스켈레톤
+  (비-thesis NO-OP), `scripts/eval.ts` 검토량 baseline(`npm run eval`). 69 테스트 green.
+- 📋 **1.5b/1.5c**: 전용 OCR 사이드카(ko-trocr/PaddleOCR-VL) + 래스터/크롭 + per-char score +
+  printed↔seal 교차검증, 도장 트랙·평가 플라이휠 — [개선계획](./improvement-plan-ocr.md), go/no-go
+  게이트 통과 시 착수(pending approval)
 
 ### Phase 2 — 확장  ⬜ `░░░░░░░░░░`
 - ⬜ 소속 자동검색 · ⬜ 내부직원 관계(조직/인사 데이터) · ⬜ 인사혁신처 DB(Computer Use) · ⬜ HWP/HWPX

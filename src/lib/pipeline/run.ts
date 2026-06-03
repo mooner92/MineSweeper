@@ -2,6 +2,7 @@ import { basename } from 'node:path';
 import type { DocType } from '@/lib/domain';
 import { aggregate } from './aggregate';
 import { classifyDocType } from './classify';
+import { crossCheck } from './crosscheck';
 import { getExtractor } from './extract';
 import { detectFormat, ingest } from './ingest';
 import type { AggregatedPerson, Extractor, IngestResult, PersonWithSource } from './types';
@@ -68,12 +69,11 @@ export async function runPipeline(
       imagePaths,
     });
 
-    const persons: PersonWithSource[] = raw.map((r) => ({
-      ...r,
-      documentId,
-      filename,
-      docType,
-    }));
+    // crossCheck runs per document (printed anchor ↔ seal/signature). NO-OP for non-thesis and
+    // currently for thesis too (no seal/signature names until Phase 1.5b OCR). Advisory only.
+    const persons: PersonWithSource[] = crossCheck(
+      raw.map((r) => ({ ...r, documentId, filename, docType })),
+    );
     allPersons.push(...persons);
 
     documents.push({
