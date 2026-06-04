@@ -18,6 +18,20 @@ export interface AggregateOptions {
   selfName?: string;
 }
 
+/** Collapse repeated source refs — same person extracted N times from one document/page/role
+ *  (e.g. a name listed across several entries of one google-scholar capture) should show once. */
+function dedupeSources(sources: SourceRef[]): SourceRef[] {
+  const seen = new Set<string>();
+  const out: SourceRef[] = [];
+  for (const s of sources) {
+    const key = `${s.documentId}|${s.page}|${s.role}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+
 /**
  * Stage 4 — collapse per-document occurrences into one row per real person.
  * Roles are unioned; provenance is collected; the applicant themself is flagged. Merging is
@@ -78,11 +92,17 @@ export function aggregate(
   return groups.map((g, idx) => {
     const canonicalName = canonicals[idx];
     // Gazetteer = the applicant's other canonical names; flag near-duplicates for review.
-    const near = fuzzyMatchWithin(
-      canonicalName,
-      canonicals.filter((_, i) => i !== idx),
-      1,
-    );
+    // Restricted to Hangul names: near-duplicate (edit-distance ≤1) is an OCR-misread signal for
+    // Korean (이주영 vs 이조영). Latin initials (C Lee vs J Lee) are distinct people, not misreads,
+    // so fuzzy-matching them would wrongly flag everyone as ambiguous.
+    const near = /[가-힣]/.test(canonicalName)
+      ? fuzzyMatchWithin(
+          canonicalName,
+          canonicals.filter((_, i) => i !== idx),
+          1,
+        ).filter((n) => n.name[0] === canonicalName[0]) // same surname only — 김종성 vs 류종성 are
+      : // different people (different 성씨), not an OCR misread; 이주영 vs 이조영 (same 이) is.
+        [];
     const ambiguous = near.length > 0;
     const nameCandidates: NameCandidate[] = ambiguous
       ? [
@@ -100,7 +120,7 @@ export function aggregate(
       canonicalName,
       nameNormalized: canonicalName,
       roles: [...g.roles],
-      sources: g.sources,
+      sources: dedupeSources(g.sources),
       affiliation: g.affiliation,
       isSelf,
       needsHuman,

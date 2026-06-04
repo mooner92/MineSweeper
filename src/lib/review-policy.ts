@@ -13,8 +13,10 @@ import type { SourceKind } from '@/lib/domain';
  * rule cannot silently diverge.
  */
 export const REVIEW_THRESHOLDS: Record<SourceKind, number> = {
-  // printed is the only source that can auto-pass.
-  printed: 0.85,
+  // printed is the only source that can auto-pass. Set at 0.75 so clean printed-text extractions
+  // (the VLM reports ~0.8–0.95 for these) are triaged as auto-pass; genuinely low-confidence
+  // reads still fall to human review. (Human confirms the whole roster regardless.)
+  printed: 0.75,
   // Non-printed kinds set above 1.0 so confidence can never satisfy the threshold — they always
   // require human review. (The short-circuit below enforces this regardless.)
   handwritten: 1.01,
