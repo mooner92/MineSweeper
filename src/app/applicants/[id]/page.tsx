@@ -43,7 +43,7 @@ export default async function ApplicantPage({ params }: { params: { id: string }
       )}
 
       <section className="seed-card overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="w-full min-w-[820px] text-sm">
           <thead className="bg-bg-layer text-left text-xs text-fg-subtle">
             <tr>
               <th className="px-4 py-2.5 font-medium">이름</th>
@@ -75,7 +75,11 @@ export default async function ApplicantPage({ params }: { params: { id: string }
                 <td className="px-4 py-3">
                   <RoleBadges roles={p.roles} />
                 </td>
-                <td className="px-4 py-3 text-fg-muted">{p.affiliation ?? '—'}</td>
+                <td className="px-4 py-3 text-fg-muted">
+                  <span className="block max-w-[240px] truncate" title={p.affiliation ?? undefined}>
+                    {p.affiliation ?? '—'}
+                  </span>
+                </td>
                 <td className="px-4 py-3 text-fg-muted">
                   {p.sources.map((s, i) => (
                     <a
