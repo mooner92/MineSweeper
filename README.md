@@ -43,7 +43,7 @@
 ```
 
 - **형식 확장** = 1단 어댑터 1개 추가 (현재: pdf / image / hwp·hwpx(텍스트 추출) / text)
-- **문서유형 확장** = 3단 프롬프트 1개 추가 (현재: 학위논문 / 대표연구실적 / 학술논문 / hindex)
+- **문서유형 확장** = 3단 프롬프트 1개 추가 (현재: 학위논문 / 대표연구실적 / 학술논문 / 연구과제 / hindex)
 
 ## Stage 3 추출기 — 교체 가능(pluggable)
 
@@ -65,10 +65,14 @@
 **앙상블(`ensemble`)**: `VLM_ENSEMBLE` 의 여러 로컬 vLLM 엔드포인트로 투표(`votes/N`=신뢰도, 불일치→사람).
 서버 기동 [`scripts/serve-ocr.sh`](./scripts/serve-ocr.sh), 자세히는 [docs/extractors.md](./docs/extractors.md)·[docs/deployment.md](./docs/deployment.md).
 
-> ✅ **현재 라이브**: GPU1에 `Qwen2.5-VL-7B-Instruct` 를 vLLM(:8010)로 운용 중, 추출기는 `vlm`. 실제
-> 합격자 ZIP(논문 13건)에서 관계인 23명(공저자·지도교수 등) 추출 + 도장/서명 감지 **end-to-end 확인**. (동시 3모델 앙상블은 VRAM
-> 부담이라 지금은 단일 경량 모델 운용.) 재부팅 유지용 systemd 유닛: [`deploy/vllm-ocr-8010.service`](./deploy/vllm-ocr-8010.service).
-> 실제 정확도/임계값 검증 절차: [docs/validation-real-samples.md](./docs/validation-real-samples.md). 현황: [docs/progress.md](./docs/progress.md).
+> ✅ **현재 라이브 상태** (실합격자 ZIP로 end-to-end 검증)
+> - **모델**: GPU1에 `Qwen2.5-VL-7B-Instruct`(vLLM, `:8010`), 추출기 `vlm`. **systemd로 상시 가동·재부팅 유지** ([`deploy/vllm-ocr-8010.service`](./deploy/vllm-ocr-8010.service)).
+> - **실검증**: 실제 합격자 ZIP(문서 13건, PDF+HWP+이미지)에서 **관계인 44명**(공저자·지도교수·연구진) 추출 + 도장/서명 감지 동작.
+> - **HWP/HWPX**: 순수 Node(`cfb`+`zlib`/`adm-zip`)로 텍스트 추출 — 연구보고서 연구진 명단까지 추출(외부변환·sudo 불필요).
+> - **한글 ZIP 견고성**: CP949 파일명 깨짐·macOS 자모분리(NFD)·초장문 파일명·다양한 내부 폴더구조 모두 처리.
+> - **회복탄력성**: 한 문서 추출 실패(예: VLM 일시중단)가 전체 작업을 멈추지 않고 해당 문서만 검토 플래그로 강등.
+>
+> 동시 3모델 앙상블은 VRAM 부담이라 단일 경량 모델 운용. 정확도/임계값 검증 절차: [docs/validation-real-samples.md](./docs/validation-real-samples.md). 현황: [docs/progress.md](./docs/progress.md).
 
 > 보안: 개인정보·논문 전문·인장을 다루므로 **외부 클라우드 API는 막힐 가능성이 큼** → 기본값은 온프레.
 > 도장·손글씨·판독난해 서명은 자동 추출을 약속하지 않고 **검토 필요 큐**로 모아 사람이 확인합니다.
@@ -189,4 +193,4 @@ ingress:
 
 - **In**: 문서 기반 관계자 추출, 형식 통합 처리, 도장·손글씨 별도 검토 큐, 검토 UI, 명단 내보내기.
 - **Out (Phase 2+)**: 추출 인물 소속 자동검색, 내부 직원 관계(부서장·실장·과제책임자), 인사혁신처 DB 수집,
-  HWP/HWPX 정식 어댑터, 도장 전용 엔진/파인튜닝, 합·불 판정(= 사람의 몫).
+  HWP 내부 도장·서명 **렌더 감지**(텍스트 추출은 지원), 도장 전용 엔진/파인튜닝, 합·불 판정(= 사람의 몫).
