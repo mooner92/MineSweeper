@@ -57,5 +57,7 @@ export function roleFromLabel(label?: string | null): Role | null {
 }
 
 export function defaultRoleForDoc(docType: DocType): Role {
-  return docType === 'degree_thesis' ? 'committee' : 'coauthor';
+  if (docType === 'degree_thesis') return 'committee';
+  if (docType === 'research_project') return 'research_staff';
+  return 'coauthor';
 }

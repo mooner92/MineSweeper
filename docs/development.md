@@ -289,8 +289,8 @@ switch (fmt) {
 
 주의: `detect.ts`는 **어댑터를 import 하지 않습니다**(특히 pdfjs). 업로드 라우트처럼 형식 판별만 필요한
 곳이 무거운 ESM-only pdf 어댑터를 번들로 끌어오지 않게 하기 위함입니다. 새 어댑터를 추가해도 `detect.ts`는
-import-free로 유지하세요. `hwp.ts`는 현재 placeholder로, 크래시 대신 `note`를 채워 파이프라인을 계속
-돌립니다(Phase 2에서 hwp→pdf/text 변환 예정).
+import-free로 유지하세요. `hwp.ts`는 `cfb`+`zlib`(.hwp)·`adm-zip`(.hwpx)로 텍스트를 추출하며, 파싱
+실패 시 크래시 대신 `note`를 채워 파이프라인을 계속 돌립니다(도장 감지용 페이지 렌더는 향후 작업).
 
 ### 6.2 새 문서유형(3단)
 
