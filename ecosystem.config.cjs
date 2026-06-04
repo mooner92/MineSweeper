@@ -11,9 +11,10 @@ const env = {
   NODE_ENV: 'production',
   DATABASE_URL: 'file:./data/minesweeper.db',
   UPLOAD_DIR: './data/uploads',
-  // 'hybrid' = text-layer docs use the fast deterministic stub; image-only (scanned/hindex) docs
-  // are OCR'd by the local VLM. ('stub' = no GPU | 'vlm' = always VLM | 'ensemble' = multi-model.)
-  EXTRACTOR_MODE: 'hybrid',
+  // 'vlm' = local VLM extracts every doc. Real academic author blocks (e.g. "Hyung-Min Lee a,b,
+  // Rokjin J. Park a,*") and Korean thesis approval pages need an LLM; the deterministic stub
+  // returns 0 on them. ('stub' = no GPU | 'hybrid' = text→stub/image→VLM | 'ensemble' = multi-model.)
+  EXTRACTOR_MODE: 'vlm',
   // Local vLLM Qwen2.5-VL on GPU1 (scripts/serve-ocr or systemd). Used by DETECT_MARKS + vlm mode.
   VLM_BASE_URL: 'http://localhost:8010/v1',
   VLM_API_KEY: 'local',

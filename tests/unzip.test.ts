@@ -51,6 +51,14 @@ describe('unzipApplicant', () => {
     expect(decodeEntryName(ascii as any)).toBe('thesis.pdf');
   });
 
+  it('recomposes NFD (decomposed) Hangul names from macOS zips to NFC', () => {
+    const nfd = '학위논문'.normalize('NFD'); // jamo-decomposed, as macOS stores filenames
+    expect(nfd).not.toBe('학위논문'); // sanity: actually decomposed
+    const entry = { rawEntryName: Buffer.from(nfd, 'utf8'), header: { flags: 0x0800 } };
+    // biome-ignore lint/suspicious/noExplicitAny: minimal mock
+    expect(decodeEntryName(entry as any)).toBe('학위논문'); // normalized to NFC
+  });
+
   it('truncates over-long filenames so extraction does not crash (ENAMETOOLONG)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ms-zip-long-'));
     const zipPath = join(dir, 'applicant.zip');
