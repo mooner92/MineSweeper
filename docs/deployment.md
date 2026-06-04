@@ -87,7 +87,7 @@ pm2 logs minesweeper-worker
 
 - 기본 포트 **3100** (`PORT` / `MINESWEEPER_PORT`). 로그 파일은 `data/logs/`.
 - env(`DATABASE_URL`·`UPLOAD_DIR`·`EXTRACTOR_MODE`·`VLM_*`)는 `ecosystem.config.cjs`의 `env` 블록에 정의돼 두 앱이 동일하게 본다.
-- 추출기 전환: `EXTRACTOR_MODE`를 `stub`/`hybrid`/`vlm`/`ensemble` 중 하나로 바꾼 뒤 `pm2 restart ecosystem.config.cjs --update-env`. (현재 운용값: `hybrid`)
+- 추출기 전환: `EXTRACTOR_MODE`를 `stub`/`hybrid`/`vlm`/`ensemble` 중 하나로 바꾼 뒤 `pm2 restart ecosystem.config.cjs --update-env`. (현재 운용값: `vlm` — 실문서 저자블록/인준 페이지는 LLM이라야 추출됨, stub은 0건)
 
 ### 1.3 워커의 동작 모델
 
@@ -134,7 +134,7 @@ sleep(WORKER_POLL_INTERVAL_MS) ▶ 다시 폴링
 | --- | --- | --- | --- |
 | `DATABASE_URL` | `file:./data/minesweeper.db` | `src/db/client.ts`, `src/db/migrate.ts` | embedded libsql DB 위치. `file:` 접두 파일 경로 또는 `:memory:`(테스트). 마이그레이터는 `file:` 경로의 상위 디렉터리를 자동 생성한다. |
 | `UPLOAD_DIR` | `./data/uploads` | 업로드/원본/크롭 저장 | 업로드 zip, 추출된 원본, 크롭 이미지가 저장되는 로컬 디렉터리. |
-| `EXTRACTOR_MODE` | `stub` | `src/worker/index.ts` 등 | Stage 3 추출기 선택. `stub`=결정적 휴리스틱(기본·GPU 불필요·테스트용), `hybrid`=텍스트는 stub·이미지는 VLM OCR(운용값), `vlm`=전수 온프레 비전/LLM, `ensemble`=다중 모델 투표. [extractors.md](./extractors.md) 참조. |
+| `EXTRACTOR_MODE` | `stub` | `src/worker/index.ts` 등 | Stage 3 추출기 선택. `stub`=결정적 휴리스틱(기본·GPU 불필요·테스트용), `hybrid`=텍스트는 stub·이미지는 VLM OCR, `vlm`=전수 온프레 비전/LLM(운용값), `ensemble`=다중 모델 투표. [extractors.md](./extractors.md) 참조. |
 | `VLM_BASE_URL` | `http://localhost:11434/v1` | VLM 추출기 | OpenAI 호환 엔드포인트 base URL. 기본값은 로컬 Ollama를 가리킨다. |
 | `VLM_API_KEY` | `ollama` | VLM 추출기 | OpenAI 호환 API 키. Ollama는 임의 문자열 허용(`ollama`). vLLM 등에서는 실제 토큰 사용. |
 | `VLM_MODEL` | `qwen3.5:9B` | VLM 추출기 | 사용할 모델 이름(엔드포인트에 미리 받아둔 모델과 일치해야 함). |
@@ -247,8 +247,9 @@ pm2 restart ecosystem.config.cjs --update-env
 # 라이브 스모크: npm run detect:smoke   (이름 추출 + 도장 bbox 감지)
 ```
 
-- **추출 모드**: `EXTRACTOR_MODE=hybrid`(현재) — 텍스트 문서는 stub(빠름), 이미지/스캔 문서는 VLM이
-  이름을 OCR. 전수 VLM이 필요하면 `vlm`, GPU 없이 텍스트만이면 `stub`. (§extractors.md 3d)
+- **추출 모드**: `EXTRACTOR_MODE=vlm`(현재) — 모든 문서를 로컬 VLM이 추출. 실제 논문 저자블록·한국어
+  인준 페이지는 LLM이라야 읽힌다(결정적 stub은 실문서에서 0건). `hybrid`=텍스트는 stub·이미지는 VLM,
+  `stub`=GPU 미사용/테스트. VLM 미가동 시 추출은 문서별로 실패 강등(검토 플래그)되며 job은 완료된다. (§extractors.md 3)
 - **감지(`DETECT_MARKS=1`)**: 관련 페이지 렌더 → VLM에 도장/서명 위치 질의 → 크롭 + 검토 큐(§extractors.md 3c).
 - GPU1 카드 1장이 비면(아래 systemd util 조정 참고) 7B VLM은 util 0.5(~23GB)로 넉넉히 올라간다.
 
