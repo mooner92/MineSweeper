@@ -56,4 +56,43 @@ describe('aggregate', () => {
     ]);
     expect(result).toHaveLength(3);
   });
+
+  it('does NOT flag distinct Latin initial names as near-duplicate candidates', () => {
+    // "C Lee" / "J Lee" are edit-distance 1 but are different people, not OCR misreads.
+    const result = aggregate([
+      person({ nameRaw: 'C Lee' }),
+      person({ nameRaw: 'J Lee' }),
+      person({ nameRaw: 'HJ Lee' }),
+    ]);
+    for (const r of result) {
+      expect(r.nameCandidates).toEqual([]);
+      expect(r.needsHuman).toBe(false); // printed + high confidence + not ambiguous → auto-pass
+    }
+  });
+
+  it('still flags Korean near-duplicates (OCR misread, same surname) as candidates', () => {
+    const result = aggregate([person({ nameRaw: '이주영' }), person({ nameRaw: '이조영' })]);
+    expect(result.every((r) => r.nameCandidates.length > 1)).toBe(true);
+    expect(result.every((r) => r.needsHuman)).toBe(true);
+  });
+
+  it('does NOT flag Korean names with different surnames as candidates', () => {
+    // 김종성 vs 류종성: edit-distance 1 but different 성씨 → different people, not an OCR misread.
+    const result = aggregate([person({ nameRaw: '김종성' }), person({ nameRaw: '류종성' })]);
+    expect(result).toHaveLength(2);
+    for (const r of result) {
+      expect(r.nameCandidates).toEqual([]);
+      expect(r.needsHuman).toBe(false);
+    }
+  });
+
+  it('dedupes repeated source refs from the same document/page/role', () => {
+    // Same person extracted 4× from one hindex capture → one source line, not four.
+    const dupes = Array.from({ length: 4 }, () =>
+      person({ nameRaw: 'Hosang Kim', documentId: 'hindex', docType: 'hindex', sourcePage: 1 }),
+    );
+    const result = aggregate(dupes);
+    expect(result).toHaveLength(1);
+    expect(result[0].sources).toHaveLength(1);
+  });
 });
