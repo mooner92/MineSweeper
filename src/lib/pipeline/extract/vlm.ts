@@ -48,11 +48,15 @@ export async function extractFromVlmEndpoint(
   cfg: VlmConfig,
   input: ExtractInput,
 ): Promise<RawPerson[]> {
+  // Names live in the front matter (저자/연구진/인준 블록). Cap the text so the prompt fits the
+  // model's context window — large reports (수백~수천 쪽) otherwise overflow and the whole doc fails
+  // with HTTP 400 (max context). Tunable via VLM_MAX_TEXT_CHARS.
+  const maxChars = Number(process.env.VLM_MAX_TEXT_CHARS ?? 12000);
   const text = input.pages
     .map((p) => p.text)
     .filter(Boolean)
     .join('\n\n')
-    .slice(0, 24000);
+    .slice(0, maxChars);
   const { system, user } = buildExtractionPrompt(input.docType, text, input.selfName);
 
   const content: ChatContent[] = [{ type: 'text', text: user }];
