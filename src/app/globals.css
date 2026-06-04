@@ -41,7 +41,7 @@
     @apply rounded-seed-lg border border-stroke bg-bg;
   }
   .seed-btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-seed px-3.5 py-2 text-sm font-semibold transition-colors;
+    @apply inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-seed px-3.5 py-2 text-sm font-semibold transition-colors;
   }
   .seed-btn-primary {
     @apply seed-btn bg-accent text-fg-oncolor hover:bg-accent-pressed disabled:opacity-50;
@@ -53,7 +53,7 @@
     @apply seed-btn text-fg-muted hover:bg-bg-layer;
   }
   .seed-badge {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold;
   }
   .seed-badge-success {
     @apply seed-badge bg-success-subtle text-success;

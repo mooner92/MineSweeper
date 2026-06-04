@@ -34,6 +34,40 @@ describe('unzipApplicant', () => {
     expect(hindex?.folderCategory).toBe('기타서류');
   });
 
+  it('handles varied internal layouts (no wrapper, deep nesting, flat)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ms-zip-layout-'));
+    const mk = (entries: [string, string][]) => {
+      const zp = join(dir, `z${Math.abs(entries.length * 31 + entries[0][0].length)}.zip`);
+      const z = new AdmZip();
+      for (const [name, body] of entries) z.addFile(name, Buffer.from(body));
+      z.writeZip(zp);
+      return unzipApplicant(zp, join(dir, `out${entries[0][0].length}-${entries.length}`));
+    };
+
+    // (a) no wrapper folder — category folders at the root
+    const a = mk([
+      ['논문첨부/thesis.pdf', 'x'],
+      ['기타서류/hindex.png', 'y'],
+    ]);
+    expect(a.applicantFolder).toBeNull();
+    expect(a.files.find((f) => f.relativePath.includes('thesis'))?.folderCategory).toBe('논문첨부');
+
+    // (b) deep nesting under a wrapper — category is the first folder under the wrapper
+    const b = mk([['2401-000050 (김철수)/학술지 게재/2022/paper.pdf', 'x']]);
+    expect(b.applicantFolder).toBe('2401-000050 (김철수)');
+    expect(b.files[0].folderCategory).toBe('학술지 게재');
+    expect(b.files[0].relativePath).toBe('학술지 게재/2022/paper.pdf');
+
+    // (c) flat dump — files at the root, no folders → no category, still extracted
+    const c = mk([
+      ['a.pdf', 'x'],
+      ['b.pdf', 'y'],
+    ]);
+    expect(c.applicantFolder).toBeNull();
+    expect(c.files).toHaveLength(2);
+    expect(c.files.every((f) => f.folderCategory === null)).toBe(true);
+  });
+
   it('decodes CP949/EUC-KR entry names (Korean Windows zips, no UTF-8 flag)', () => {
     // "이준호" in CP949/EUC-KR bytes, with the UTF-8 general-purpose flag bit cleared.
     const cp949 = { rawEntryName: Buffer.from([0xc0, 0xcc, 0xc1, 0xd8, 0xc8, 0xa3]), header: { flags: 0 } };
