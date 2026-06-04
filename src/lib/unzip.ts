@@ -1,10 +1,12 @@
-import { mkdirSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve, sep } from 'node:path';
 import AdmZip from 'adm-zip';
 
 /** Defensive caps against zip bombs (override via env). */
 const MAX_ENTRIES = Number(process.env.MAX_ZIP_ENTRIES ?? 5000);
 const MAX_TOTAL_BYTES = Number(process.env.MAX_ZIP_TOTAL_BYTES ?? 500 * 1024 * 1024);
+/** Per path-component byte budget. ext4/most FS limit is 255 bytes; keep headroom. */
+const MAX_COMPONENT_BYTES = 200;
 
 export interface ExtractedFile {
   /** Real path on disk. */
@@ -24,6 +26,52 @@ export interface UnzipResult {
 
 const IGNORE = /(^|\/)(__MACOSX|\.DS_Store|Thumbs\.db)(\/|$)/;
 
+const utf8Strict = new TextDecoder('utf-8', { fatal: true });
+const utf8Loose = new TextDecoder('utf-8');
+const cp949 = new TextDecoder('euc-kr'); // WHATWG 'euc-kr' == CP949, Korean Windows default
+
+/**
+ * Decode a zip entry name with the correct charset. Korean Windows zippers store names in CP949
+ * without the UTF-8 flag; adm-zip's default UTF-8 read turns them into U+FFFD (which also blows
+ * past the filesystem name-length limit). So: honor the UTF-8 flag, else prefer UTF-8 when the
+ * bytes are valid UTF-8, otherwise fall back to CP949/EUC-KR.
+ */
+export function decodeEntryName(entry: AdmZip.IZipEntry): string {
+  const raw = entry.rawEntryName;
+  const isUtf8 = (entry.header.flags & 0x0800) !== 0; // general-purpose bit 11
+  if (isUtf8) return utf8Loose.decode(raw);
+  try {
+    return utf8Strict.decode(raw);
+  } catch {
+    return cp949.decode(raw);
+  }
+}
+
+/** Truncate to a byte budget without splitting a multi-byte char, preserving the extension. */
+function truncateToBytes(name: string, maxBytes: number): string {
+  if (Buffer.byteLength(name, 'utf8') <= maxBytes) return name;
+  const dot = name.lastIndexOf('.');
+  const ext = dot > 0 ? name.slice(dot) : '';
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const budget = Math.max(0, maxBytes - Buffer.byteLength(ext, 'utf8'));
+  let out = '';
+  for (const ch of base) {
+    if (Buffer.byteLength(out + ch, 'utf8') > budget) break;
+    out += ch;
+  }
+  return (out || '_') + ext;
+}
+
+/** Make one path component safe: strip control/separator chars, neutralize traversal, cap length. */
+function sanitizeComponent(name: string): string {
+  let s = name
+    .replace(/\p{Cc}/gu, '')
+    .replace(/[/\\]/g, '_')
+    .trim();
+  if (s === '' || s === '.' || s === '..') s = '_';
+  return truncateToBytes(s, MAX_COMPONENT_BYTES);
+}
+
 /** True if a zip entry path would extract OUTSIDE destDir (zip-slip). */
 export function isUnsafeEntryPath(destDir: string, entryName: string): boolean {
   const root = resolve(destDir);
@@ -38,39 +86,57 @@ export function unzipApplicant(zipPath: string, destDir: string): UnzipResult {
   const zip = new AdmZip(zipPath);
   const allEntries = zip.getEntries();
 
-  // Validate BEFORE extracting: bound entry count, bound total uncompressed size, and reject
-  // any entry whose path escapes destDir (zip-slip) — defense-in-depth beyond adm-zip.
   if (allEntries.length > MAX_ENTRIES) {
     throw new Error(`zip has too many entries (${allEntries.length} > ${MAX_ENTRIES})`);
   }
+
+  // Decode + validate BEFORE writing anything: bound total uncompressed size, decode names with the
+  // right charset, sanitize each path component, and reject any entry that escapes destDir.
   let totalBytes = 0;
+  const planned: { entry: AdmZip.IZipEntry; parts: string[]; filepath: string }[] = [];
   for (const e of allEntries) {
     totalBytes += e.header.size;
     if (totalBytes > MAX_TOTAL_BYTES) {
       throw new Error(`zip uncompressed size exceeds limit (> ${MAX_TOTAL_BYTES} bytes)`);
     }
-    if (isUnsafeEntryPath(destDir, e.entryName)) {
-      throw new Error(`unsafe zip entry path (zip-slip): ${e.entryName}`);
+    const decoded = decodeEntryName(e);
+    if (e.isDirectory || IGNORE.test(decoded)) continue;
+
+    const parts = decoded
+      .split('/')
+      .filter((p) => p !== '')
+      .map(sanitizeComponent)
+      .filter((p) => p !== '');
+    if (parts.length === 0) continue;
+
+    if (isUnsafeEntryPath(destDir, parts.join('/'))) {
+      throw new Error(`unsafe zip entry path (zip-slip): ${decoded}`);
+    }
+    planned.push({ entry: e, parts, filepath: join(destDir, ...parts) });
+  }
+
+  // Write each file. One unreadable/odd entry is skipped (logged) rather than failing the whole
+  // upload — a single bad name in a 50-file applicant zip should not lose the other 49.
+  const written: typeof planned = [];
+  for (const p of planned) {
+    try {
+      mkdirSync(dirname(p.filepath), { recursive: true });
+      writeFileSync(p.filepath, p.entry.getData());
+      written.push(p);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[unzip] skipped entry ${p.parts.join('/')}: ${(err as Error).message}`);
     }
   }
 
-  zip.extractAllTo(destDir, true);
-
-  const entries = allEntries.filter((e) => !e.isDirectory && !IGNORE.test(e.entryName));
-
   // The zip usually wraps everything in a single "<id> (name)" folder.
-  const topSegments = new Set(entries.map((e) => e.entryName.split('/')[0]));
+  const topSegments = new Set(written.map((p) => p.parts[0]));
   const applicantFolder = topSegments.size === 1 ? [...topSegments][0] : null;
 
-  const files: ExtractedFile[] = entries.map((e) => {
-    const parts = e.entryName.split('/');
-    const withinRoot = applicantFolder ? parts.slice(1) : parts;
+  const files: ExtractedFile[] = written.map((p) => {
+    const withinRoot = applicantFolder ? p.parts.slice(1) : p.parts;
     const folderCategory = withinRoot.length > 1 ? withinRoot[0] : null;
-    return {
-      filepath: join(destDir, ...parts),
-      relativePath: withinRoot.join('/'),
-      folderCategory,
-    };
+    return { filepath: p.filepath, relativePath: withinRoot.join('/'), folderCategory };
   });
 
   return { rootDir: destDir, applicantFolder, files };

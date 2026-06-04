@@ -1,9 +1,9 @@
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import AdmZip from 'adm-zip';
 import { describe, expect, it } from 'vitest';
-import { isUnsafeEntryPath, unzipApplicant } from '@/lib/unzip';
+import { decodeEntryName, isUnsafeEntryPath, unzipApplicant } from '@/lib/unzip';
 import { THESIS_KO } from './fixtures';
 
 describe('unzipApplicant', () => {
@@ -32,6 +32,44 @@ describe('unzipApplicant', () => {
 
     const hindex = result.files.find((f) => f.relativePath.includes('hindex.png'));
     expect(hindex?.folderCategory).toBe('기타서류');
+  });
+
+  it('decodes CP949/EUC-KR entry names (Korean Windows zips, no UTF-8 flag)', () => {
+    // "이준호" in CP949/EUC-KR bytes, with the UTF-8 general-purpose flag bit cleared.
+    const cp949 = { rawEntryName: Buffer.from([0xc0, 0xcc, 0xc1, 0xd8, 0xc8, 0xa3]), header: { flags: 0 } };
+    // biome-ignore lint/suspicious/noExplicitAny: minimal mock of the fields decodeEntryName reads
+    expect(decodeEntryName(cp949 as any)).toBe('이준호');
+
+    // Same characters as UTF-8 with the UTF-8 flag set (bit 11) -> decoded as UTF-8.
+    const utf8 = { rawEntryName: Buffer.from('이준호', 'utf8'), header: { flags: 0x0800 } };
+    // biome-ignore lint/suspicious/noExplicitAny: minimal mock
+    expect(decodeEntryName(utf8 as any)).toBe('이준호');
+
+    // ASCII without a flag stays ASCII (valid UTF-8 path).
+    const ascii = { rawEntryName: Buffer.from('thesis.pdf', 'utf8'), header: { flags: 0 } };
+    // biome-ignore lint/suspicious/noExplicitAny: minimal mock
+    expect(decodeEntryName(ascii as any)).toBe('thesis.pdf');
+  });
+
+  it('truncates over-long filenames so extraction does not crash (ENAMETOOLONG)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ms-zip-long-'));
+    const zipPath = join(dir, 'applicant.zip');
+
+    // 120 Korean chars = 360 bytes (UTF-8) > 255-byte filesystem limit — the case that crashed.
+    const longBase = '가'.repeat(120);
+    const zip = new AdmZip();
+    zip.addFile(`2401-000001 (홍길동)/논문첨부/${longBase}.pdf`, Buffer.from('pdf'));
+    zip.writeZip(zipPath);
+
+    const dest = join(dir, 'out');
+    const result = unzipApplicant(zipPath, dest); // must not throw
+
+    expect(result.files).toHaveLength(1);
+    const f = result.files[0];
+    expect(existsSync(f.filepath)).toBe(true); // actually written to disk
+    expect(Buffer.byteLength(basename(f.filepath), 'utf8')).toBeLessThanOrEqual(200);
+    expect(f.filepath.endsWith('.pdf')).toBe(true); // extension preserved
+    expect(f.folderCategory).toBe('논문첨부');
   });
 
   it('detects zip-slip entry paths that escape the destination', () => {

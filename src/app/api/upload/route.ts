@@ -36,7 +36,23 @@ export async function POST(req: Request) {
   writeFileSync(zipPath, Buffer.from(await file.arrayBuffer()));
 
   const extractDir = join(baseDir, 'files');
-  const { applicantFolder, files } = unzipApplicant(zipPath, extractDir);
+  let extracted: ReturnType<typeof unzipApplicant>;
+  try {
+    extracted = unzipApplicant(zipPath, extractDir);
+  } catch (err) {
+    console.error('[upload] unzip failed', err);
+    return NextResponse.json(
+      { error: `zip 처리 실패: ${(err as Error).message}` },
+      { status: 422 },
+    );
+  }
+  const { applicantFolder, files } = extracted;
+  if (files.length === 0) {
+    return NextResponse.json(
+      { error: 'zip 안에서 처리할 파일을 찾지 못했습니다 (빈 압축이거나 인식 가능한 문서 없음)' },
+      { status: 422 },
+    );
+  }
   const applicantName =
     (applicantFolder ? parseApplicantFolder(applicantFolder).applicantName : null) ??
     file.name.replace(/\.zip$/i, '');
