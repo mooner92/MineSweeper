@@ -13,6 +13,7 @@ export const DOC_TYPES = [
   'degree_thesis',
   'representative_research',
   'journal_article',
+  'research_project',
   'hindex',
   'unknown',
 ] as const;
@@ -83,6 +84,7 @@ export const DOC_TYPE_LABELS_KO: Record<DocType, string> = {
   degree_thesis: '학위논문',
   representative_research: '대표연구실적',
   journal_article: '학술논문',
+  research_project: '연구과제',
   hindex: '구글스칼라(hindex)',
   unknown: '미분류',
 };

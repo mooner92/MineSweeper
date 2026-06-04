@@ -206,25 +206,24 @@ export function ingestText(filepath: string): IngestResult
 정규화: `\r\n → \n`, 줄 끝 공백 제거(`[ \t]+\n → \n`), 양끝 `trim()`. `hasText`/`hasTextLayer`
 는 정규화 결과 길이가 0 보다 큰지로 정한다. 항상 단일 페이지(`pageNumber: 1`).
 
-#### (d) `ingestHwp` — Phase 1 placeholder
+#### (d) `ingestHwp` — HWP 5.x + HWPX 텍스트 추출
 
 ```ts
 // src/lib/pipeline/ingest/hwp.ts
 export function ingestHwp(filepath: string): IngestResult
 ```
 
-HWP/HWPX 는 Phase 1 에서 **미지원**이다. 실제 변환 어댑터(hwp → pdf/text)는 Phase 2 작업이다.
-지금은 크래시 대신 "지원 안 됨"으로 표시해 파이프라인이 계속 돌게 한다.
+**순수 Node**(의존성: `cfb` + 내장 `zlib` + `adm-zip`, 네이티브/외부변환/sudo 불필요)로 HWP 텍스트를 뽑는다.
 
-```ts
-pages: [],                  // 페이지 없음
-pageCount: 0,
-hasTextLayer: false,
-note: 'hwp/hwpx not supported in Phase 1 (adapter placeholder — Phase 2 converts to pdf/text)',
-```
+- **`.hwp`(구형 바이너리, CFB/OLE)**: `cfb`로 컨테이너를 열고 `FileHeader`의 압축 플래그를 확인 →
+  `BodyText/Section*` 스트림을 `zlib.inflateRawSync`로 풀고 `HWPTAG_PARA_TEXT`(67) 레코드의 UTF-16LE
+  텍스트를 파싱(인라인/확장 컨트롤은 8 wchar로 스킵). 라이브 실파일(33MB/153p)에서 약 15만 자, 연구진
+  인명까지 정확 추출 확인.
+- **`.hwpx`(OWPML zip)**: `adm-zip`으로 `Contents/section*.xml`의 `<hp:t>` 런 텍스트를 추출(엔티티 디코드).
+- 실패 시 빈 결과 + `note` 로 graceful → Stage 3 가 건너뛰고, 텍스트가 없으면 `needs_vision` 으로 사람 검토.
 
-> 영향: `pages` 가 비어 있으므로 Stage 3 추출기는 추출할 게 없고, 결과적으로 이 문서는
-> 사람 검토로 남는다. 이것이 의도된 동작이다(추측으로 이름을 지어내지 않는다).
+> 도장/수기 서명 **자동 감지**는 HWP 페이지 렌더링이 필요해 현재 범위 밖이다. 텍스트가 없는(스캔형)
+> HWP는 `needs_vision` 플래그로 사람이 원문을 확인한다. (추측으로 이름을 지어내지 않는다.)
 
 ### Stage 1 어댑터 요약
 

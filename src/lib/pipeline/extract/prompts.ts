@@ -10,7 +10,7 @@ const COMMON_RULES = `반드시 지켜라:
 - 참고문헌 / References / Bibliography / 참고자료에 인용된 저자는 절대 추출하지 않는다.
 - 출력은 JSON 객체 하나만. 형식:
   {"persons":[{"name":string,"role":string,"affiliation":string|null,"source_kind":string,"page":number,"confidence":number,"is_self":boolean}]}
-- role 허용값: supervisor, co_supervisor, committee, department_head, principal_investigator, research_staff, coauthor.
+- role 허용값: supervisor, co_supervisor, committee, department_head, principal_investigator, research_staff, coauthor, project_manager.
 - source_kind 허용값: printed, handwritten, seal, signature. 인쇄된 텍스트면 printed.
 - confidence 는 0~1 사이 숫자.`;
 
@@ -29,6 +29,12 @@ export function buildExtractionPrompt(docType: DocType, text: string, selfName?:
     case 'journal_article':
       task =
         '논문 1페이지 저자 블록에서 공저자(coauthor)를 추출하라. 소속/이메일이 있으면 affiliation 에 담아라. 본문/참고문헌의 인용 저자는 제외한다.';
+      break;
+    case 'research_project':
+      task =
+        '연구보고서/연구과제(용역·수탁) 문서에서 연구진을 추출하라. 연구책임자=principal_investigator, ' +
+        '과제책임자=project_manager, 연구원/공동연구원/참여연구원=research_staff. 제출문·연구진 명단·' +
+        '참여연구원 표를 보고, 소속이 있으면 affiliation 에 담아라. 발주처/감수자 등 기관명은 이름이 아니므로 제외한다.';
       break;
     case 'hindex':
       task =
