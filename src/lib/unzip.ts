@@ -136,12 +136,19 @@ export function unzipApplicant(zipPath: string, destDir: string): UnzipResult {
     }
   }
 
-  // The zip usually wraps everything in a single "<id> (name)" folder.
-  const topSegments = new Set(written.map((p) => p.parts[0]));
-  const applicantFolder = topSegments.size === 1 ? [...topSegments][0] : null;
+  // Applicant zips vary in layout per applicant: a single "<id> (name)" wrapper folder, category
+  // folders at the root, deeper nesting, or a flat dump of files. Detect a wrapper robustly — a
+  // single top-level DIRECTORY that EVERY file sits under (each path has >1 segment). Anything else
+  // (multiple tops, or a lone file at the root) means there is no wrapper.
+  const topSegments = [...new Set(written.map((p) => p.parts[0]))];
+  const applicantFolder =
+    topSegments.length === 1 && written.every((p) => p.parts.length > 1) ? topSegments[0] : null;
 
   const files: ExtractedFile[] = written.map((p) => {
     const withinRoot = applicantFolder ? p.parts.slice(1) : p.parts;
+    // Category = the first folder under the root (a file directly at the root has no category).
+    // docType itself is classified primarily from the filename [tag], so this is a display/grouping
+    // hint and degrades gracefully (null) when the layout has no category folders.
     const folderCategory = withinRoot.length > 1 ? withinRoot[0] : null;
     return { filepath: p.filepath, relativePath: withinRoot.join('/'), folderCategory };
   });
