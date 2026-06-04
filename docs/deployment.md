@@ -87,7 +87,7 @@ pm2 logs minesweeper-worker
 
 - 기본 포트 **3100** (`PORT` / `MINESWEEPER_PORT`). 로그 파일은 `data/logs/`.
 - env(`DATABASE_URL`·`UPLOAD_DIR`·`EXTRACTOR_MODE`·`VLM_*`)는 `ecosystem.config.cjs`의 `env` 블록에 정의돼 두 앱이 동일하게 본다.
-- 추출기 전환: `EXTRACTOR_MODE`를 `stub`→`vlm` 후 `pm2 restart minesweeper-worker`.
+- 추출기 전환: `EXTRACTOR_MODE`를 `stub`/`hybrid`/`vlm`/`ensemble` 중 하나로 바꾼 뒤 `pm2 restart ecosystem.config.cjs --update-env`. (현재 운용값: `hybrid`)
 
 ### 1.3 워커의 동작 모델
 
@@ -134,7 +134,7 @@ sleep(WORKER_POLL_INTERVAL_MS) ▶ 다시 폴링
 | --- | --- | --- | --- |
 | `DATABASE_URL` | `file:./data/minesweeper.db` | `src/db/client.ts`, `src/db/migrate.ts` | embedded libsql DB 위치. `file:` 접두 파일 경로 또는 `:memory:`(테스트). 마이그레이터는 `file:` 경로의 상위 디렉터리를 자동 생성한다. |
 | `UPLOAD_DIR` | `./data/uploads` | 업로드/원본/크롭 저장 | 업로드 zip, 추출된 원본, 크롭 이미지가 저장되는 로컬 디렉터리. |
-| `EXTRACTOR_MODE` | `stub` | `src/worker/index.ts` 등 | Stage 3 추출기 선택. `stub`=결정적 휴리스틱(기본·GPU 불필요·테스트용), `vlm`=온프레 비전/LLM(OpenAI 호환). [extractors.md](./extractors.md) 참조. |
+| `EXTRACTOR_MODE` | `stub` | `src/worker/index.ts` 등 | Stage 3 추출기 선택. `stub`=결정적 휴리스틱(기본·GPU 불필요·테스트용), `hybrid`=텍스트는 stub·이미지는 VLM OCR(운용값), `vlm`=전수 온프레 비전/LLM, `ensemble`=다중 모델 투표. [extractors.md](./extractors.md) 참조. |
 | `VLM_BASE_URL` | `http://localhost:11434/v1` | VLM 추출기 | OpenAI 호환 엔드포인트 base URL. 기본값은 로컬 Ollama를 가리킨다. |
 | `VLM_API_KEY` | `ollama` | VLM 추출기 | OpenAI 호환 API 키. Ollama는 임의 문자열 허용(`ollama`). vLLM 등에서는 실제 토큰 사용. |
 | `VLM_MODEL` | `qwen3.5:9B` | VLM 추출기 | 사용할 모델 이름(엔드포인트에 미리 받아둔 모델과 일치해야 함). |
@@ -241,15 +241,35 @@ CUDA_VISIBLE_DEVICES=1 /data/vllm/env/bin/vllm serve Qwen/Qwen2.5-VL-7B-Instruct
   --served-model-name Qwen2.5-VL-7B-Instruct --port 8010 --api-key local \
   --gpu-memory-utilization 0.5 --max-model-len 16384 --limit-mm-per-prompt '{"image":4}'
 
-# 앱 환경(ecosystem): EXTRACTOR_MODE=vlm(이미지 이름 OCR까지) 또는 stub(텍스트 이름) + 감지 on
+# 앱 환경(ecosystem): EXTRACTOR_MODE=hybrid(텍스트=stub/이미지=VLM OCR) + 감지 on
 #   DETECT_MARKS=1  VLM_BASE_URL=http://localhost:8010/v1  VLM_API_KEY=local  VLM_MODEL=Qwen2.5-VL-7B-Instruct
 pm2 restart ecosystem.config.cjs --update-env
 # 라이브 스모크: npm run detect:smoke   (이름 추출 + 도장 bbox 감지)
 ```
 
+- **추출 모드**: `EXTRACTOR_MODE=hybrid`(현재) — 텍스트 문서는 stub(빠름), 이미지/스캔 문서는 VLM이
+  이름을 OCR. 전수 VLM이 필요하면 `vlm`, GPU 없이 텍스트만이면 `stub`. (§extractors.md 3d)
 - **감지(`DETECT_MARKS=1`)**: 관련 페이지 렌더 → VLM에 도장/서명 위치 질의 → 크롭 + 검토 큐(§extractors.md 3c).
 - GPU1 카드 1장이 비면(아래 systemd util 조정 참고) 7B VLM은 util 0.5(~23GB)로 넉넉히 올라간다.
-- **상시화**: 위 vllm 명령을 사용자 systemd 서비스로 등록하면(코더 서비스와 동일 패턴) 재부팅에도 유지된다.
+
+#### 재부팅 유지 — systemd 등록 (권장)
+
+위 vllm 프로세스는 nohup/수동이면 재부팅 시 사라진다. 코더 서비스와 동일 패턴의 유닛 파일을
+`deploy/vllm-ocr-8010.service`로 제공한다. 설치(최초 1회, sudo 필요):
+
+```bash
+sudo cp deploy/vllm-ocr-8010.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable vllm-ocr-8010.service          # 부팅 시 자동 시작
+# 현재 수동 실행 중이면 systemd 관리로 전환:
+pkill -f 'vllm serve Qwen/Qwen2.5-VL-7B' ; sleep 3
+sudo systemctl start vllm-ocr-8010.service
+systemctl status vllm-ocr-8010.service --no-pager
+curl -s localhost:8010/v1/models -H 'authorization: Bearer local'
+```
+
+유닛은 GPU1(`CUDA_VISIBLE_DEVICES=1`)·`HF_HOME=/home/mooner92/.cache/huggingface`(모델 캐시 위치)를
+쓴다. 등록 전 `nvidia-smi`로 GPU1이 이 모델용으로 맞는지 확인할 것.
 
 > ℹ️ **GPU 메모리 확보 팁**: 공유 코더 vLLM이 `--gpu-memory-utilization 0.85`로 카드를 선점하면 여유가
 > 거의 없다. 소유자가 해당 systemd 유닛의 util을 낮추거나(예: 0.55) TP=1로 한 카드에 몰면 다른 카드가
