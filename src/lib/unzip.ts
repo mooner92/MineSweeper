@@ -39,12 +39,19 @@ const cp949 = new TextDecoder('euc-kr'); // WHATWG 'euc-kr' == CP949, Korean Win
 export function decodeEntryName(entry: AdmZip.IZipEntry): string {
   const raw = entry.rawEntryName;
   const isUtf8 = (entry.header.flags & 0x0800) !== 0; // general-purpose bit 11
-  if (isUtf8) return utf8Loose.decode(raw);
-  try {
-    return utf8Strict.decode(raw);
-  } catch {
-    return cp949.decode(raw);
+  let name: string;
+  if (isUtf8) {
+    name = utf8Loose.decode(raw);
+  } else {
+    try {
+      name = utf8Strict.decode(raw);
+    } catch {
+      name = cp949.decode(raw);
+    }
   }
+  // macOS zips store Hangul decomposed (NFD: 학 -> ㅎㅏㄱ); recompose to NFC so the names display
+  // correctly and the [tag]/folder classifier (which matches NFC keywords) works.
+  return name.normalize('NFC');
 }
 
 /** Truncate to a byte budget without splitting a multi-byte char, preserving the extension. */

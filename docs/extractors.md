@@ -18,8 +18,8 @@ Stage 3 는 형식을 모른다. 오직 **문서 유형의 차이**(`degree_thes
 | 모드 | 클래스 | 성격 | 용도 |
 |------|--------|------|------|
 | `stub` (기본) | `StubExtractor` | 결정론적·GPU 불필요·휴리스틱 | 개발 기본값, **모든 테스트가 쓰는 유일한 추출기** |
-| `hybrid` | `HybridExtractor` | 텍스트=stub / 이미지=vlm 라우팅 | **현재 운용값**, 텍스트는 빠르게·이미지 문서는 OCR |
-| `vlm` | `VlmExtractor` | 온프레 비전/LLM (OpenAI 호환 엔드포인트) | 전수 VLM 비교/운영 경로 |
+| `hybrid` | `HybridExtractor` | 텍스트=stub / 이미지=vlm 라우팅 | 절충(텍스트는 빠르게·이미지만 OCR) |
+| `vlm` | `VlmExtractor` | 온프레 비전/LLM (OpenAI 호환 엔드포인트) | **현재 운용값** — 실문서 저자블록/인준 페이지 추출(stub은 0건) |
 | `ensemble` | `EnsembleExtractor` | 로컬 vLLM 다중 모델 투표 | 정밀도/필터링 강화(다중 VRAM 필요) |
 
 ---
@@ -605,7 +605,11 @@ new EnsembleExtractor(configs, { minVotes, caller }) // caller 주입 → 목업
 
 ---
 
-## 3d. `HybridExtractor` — 텍스트/이미지 라우팅 (`EXTRACTOR_MODE=hybrid`) — 현재 운용값
+## 3d. `HybridExtractor` — 텍스트/이미지 라우팅 (`EXTRACTOR_MODE=hybrid`)
+
+> 참고: 실제 학술 PDF의 저자블록(예: `Jiho Lee a,b, Nara Park a,*`)과 한국어 인준
+> 페이지는 결정적 stub이 **0건**을 반환한다(휴리스틱 한계, 라이브 확인). 그래서 현재 **운용값은
+> `vlm`**(전수 VLM)이다. `hybrid`는 GPU 비용을 아끼되 텍스트 문서 추출 품질을 일부 포기하는 절충안.
 
 `src/lib/pipeline/extract/hybrid.ts`. 문서 **단위**로 추출기를 고른다:
 
