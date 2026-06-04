@@ -2,7 +2,10 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import type { IngestResult, PageBundle } from '@/lib/pipeline/types';
 
-const MAX_PAGES = 100;
+// Cap pages parsed for text. Names live in the front matter (저자/연구진/인준 블록), and the
+// extractor only sends the first ~12k chars to the VLM anyway — so parsing all pages of a huge
+// report (수백~수천 쪽) is wasted CPU and the main slowness. Tunable via PDF_MAX_PAGES.
+const MAX_PAGES = Number(process.env.PDF_MAX_PAGES ?? 20);
 /** Below this many characters on a page, we treat it as having no usable text layer. */
 const MIN_TEXT_CHARS = 12;
 
