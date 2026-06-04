@@ -1,0 +1,37 @@
+# MineSweeper OCR / mark-detection model — local vLLM serving Qwen2.5-VL-7B on port 8010 (GPU1).
+# Mirrors the existing vllm-qwen25-coder-32b.service conventions on this box.
+# This is the model used by EXTRACTOR_MODE=hybrid|vlm (image-doc name OCR) and DETECT_MARKS=1
+# (seal/signature/handwriting detection). LOCAL ONLY — no external API.
+#
+# Install (one-time, needs sudo):
+#   sudo cp deploy/vllm-ocr-8010.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable vllm-ocr-8010.service        # start on boot
+#   # then switch the running nohup process over to systemd management:
+#   pkill -f 'vllm serve Qwen/Qwen2.5-VL-7B' ; sleep 3
+#   sudo systemctl start vllm-ocr-8010.service
+#   systemctl status vllm-ocr-8010.service
+#   curl -s localhost:8010/v1/models -H 'authorization: Bearer local'
+#
+# Verify GPU1 is the intended card for this model before enabling (nvidia-smi).
+
+[Unit]
+Description=vLLM Qwen2.5-VL-7B-Instruct (MineSweeper OCR + mark detection, port 8010, GPU1)
+After=network.target
+
+[Service]
+Type=simple
+User=mooner92
+WorkingDirectory=/data/vllm
+Environment="LANG=en_US.UTF-8"
+Environment="LC_ALL=en_US.UTF-8"
+Environment="HF_HOME=/home/mooner92/.cache/huggingface"
+Environment="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
+Environment="CUDA_VISIBLE_DEVICES=1"
+TimeoutStartSec=600
+ExecStart=/data/vllm/env/bin/vllm serve Qwen/Qwen2.5-VL-7B-Instruct --served-model-name Qwen2.5-VL-7B-Instruct --port 8010 --api-key local --gpu-memory-utilization 0.5 --max-model-len 16384 --limit-mm-per-prompt '{"image":4}'
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

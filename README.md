@@ -18,7 +18,7 @@
 
 | 영역 | 문서 |
 |---|---|
-| 진행 / 계획 | [progress(진척도)](./docs/progress.md) · [improvement-plan-ocr](./docs/improvement-plan-ocr.md) · [meeting-2026-05-22-sejong](./docs/meeting-2026-05-22-sejong.md) |
+| 진행 / 계획 | [progress(진척도)](./docs/progress.md) · [improvement-plan-ocr](./docs/improvement-plan-ocr.md) · [실샘플 검증 절차](./docs/validation-real-samples.md) · [meeting-2026-05-22-sejong](./docs/meeting-2026-05-22-sejong.md) |
 | 아키텍처 / 파이프라인 | [architecture](./docs/architecture.md) · [pipeline](./docs/pipeline.md) |
 | 추출기 / 이름 매칭 | [extractors](./docs/extractors.md) · [names-and-matching](./docs/names-and-matching.md) |
 | 데이터 / 워커 | [data-model](./docs/data-model.md) · [worker](./docs/worker.md) |
@@ -50,11 +50,12 @@
 | 모드 | 구현 | 용도 |
 |---|---|---|
 | `stub` (기본) | `extract/stub.ts` | 결정적 휴리스틱. GPU 불필요, **모든 테스트가 사용** |
-| `vlm` | `extract/vlm.ts` | 단일 온프레 VLM(OpenAI 호환: 로컬 vLLM/Ollama) |
+| `hybrid` ✅운용 | `extract/hybrid.ts` | **텍스트 문서=stub(빠름) / 이미지·스캔 문서=VLM OCR**. 둘의 장점만 |
+| `vlm` | `extract/vlm.ts` | 전수 단일 온프레 VLM(OpenAI 호환: 로컬 vLLM/Ollama) |
 | `ensemble` | `extract/ensemble.ts` | **로컬 vLLM 모델 3종을 투표**(합의=신뢰도, 불일치=사람에게). 정밀도/필터링↑ |
 
-`EXTRACTOR_MODE=vlm` 로 전환하면 `VLM_BASE_URL`의 로컬 모델을 호출합니다. 스캔 PDF/이미지(hindex)는
-페이지 이미지를 함께 전송합니다.
+현재 운용값은 `hybrid` — 텍스트 레이어가 있는 문서는 결정적 stub로 빠르게, 텍스트가 없는 이미지/스캔
+문서(예: `hindex` 구글 스칼라 캡처)는 로컬 VLM이 이름을 OCR합니다. `vlm`은 전수 VLM, `stub`은 GPU 불필요.
 
 **도장/서명 감지(`DETECT_MARKS=1`)**: 인준/저자 페이지를 이미지로 렌더해 VLM에 **도장·서명·손글씨의
 위치(bbox)** 를 물어(글자는 안 읽음) **크롭 + 검토 큐**로 올립니다. "타이핑 없이 — 이름은 추출, 도장 있는
@@ -63,9 +64,10 @@
 **앙상블(`ensemble`)**: `VLM_ENSEMBLE` 의 여러 로컬 vLLM 엔드포인트로 투표(`votes/N`=신뢰도, 불일치→사람).
 서버 기동 [`scripts/serve-ocr.sh`](./scripts/serve-ocr.sh), 자세히는 [docs/extractors.md](./docs/extractors.md)·[docs/deployment.md](./docs/deployment.md).
 
-> ✅ **현재 라이브**: GPU1에 `Qwen2.5-VL-7B-Instruct` 를 vLLM(:8010)로 운용 중. 합성 인준서로 이름 추출 +
-> 도장 bbox 감지 + 크롭 생성까지 **end-to-end 동작 확인**. 실제 정확도는 합격자 샘플로 검증 예정. (동시 3모델
-> 앙상블은 VRAM 부담이라 지금은 단일 경량 모델 운용.) 현황: [docs/progress.md](./docs/progress.md).
+> ✅ **현재 라이브**: GPU1에 `Qwen2.5-VL-7B-Instruct` 를 vLLM(:8010)로 운용 중, 추출기는 `hybrid`. 합성
+> 인준서로 이름 추출 + 도장 bbox 감지 + 크롭 생성까지 **end-to-end 동작 확인**. (동시 3모델 앙상블은 VRAM
+> 부담이라 지금은 단일 경량 모델 운용.) 재부팅 유지용 systemd 유닛: [`deploy/vllm-ocr-8010.service`](./deploy/vllm-ocr-8010.service).
+> 실제 정확도/임계값 검증 절차: [docs/validation-real-samples.md](./docs/validation-real-samples.md). 현황: [docs/progress.md](./docs/progress.md).
 
 > 보안: 개인정보·논문 전문·인장을 다루므로 **외부 클라우드 API는 막힐 가능성이 큼** → 기본값은 온프레.
 > 도장·손글씨·판독난해 서명은 자동 추출을 약속하지 않고 **검토 필요 큐**로 모아 사람이 확인합니다.
@@ -125,7 +127,7 @@ pm2 save                         # 프로세스 목록 저장(재시작 복구)
 | `MINESWEEPER_PORT=<포트> pm2 restart ecosystem.config.cjs --update-env` | 포트 변경 |
 
 - 기본 포트 **3100** (`PORT` / `MINESWEEPER_PORT`). 로컬 확인: `http://localhost:3100`
-- 추출기 전환: `ecosystem.config.cjs`의 `EXTRACTOR_MODE`를 `stub`→`vlm`(온프레 Ollama) 후 `pm2 restart minesweeper-worker`
+- 추출기 전환: `ecosystem.config.cjs`의 `EXTRACTOR_MODE`(`stub`/`hybrid`/`vlm`/`ensemble`, 현재 `hybrid`) 변경 후 `pm2 restart ecosystem.config.cjs --update-env`
 
 ### Cloudflare Tunnel
 

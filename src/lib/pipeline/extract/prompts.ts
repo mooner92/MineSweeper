@@ -38,8 +38,14 @@ export function buildExtractionPrompt(docType: DocType, text: string, selfName?:
       task = '문서에서 관계자(지도교수/심사위원/공저자 등)를 추출하라.';
   }
 
+  // Image-only docs (scanned PDF / hindex) have no text layer — instruct the model to read the
+  // attached image directly instead of pointing it at an empty text block (which yields []).
+  const body = text.trim()
+    ? `[문서 텍스트 시작]\n${text}\n[문서 텍스트 끝]`
+    : '이 문서는 텍스트 레이어가 없는 스캔/이미지 문서다. 첨부된 페이지 이미지를 직접 읽어(OCR) 추출하라. 보이는 이름만 추출하고, 안 보이면 빈 배열.';
+
   return {
     system: `너는 채용 이해충돌 검토를 돕는 관계자 추출기다. ${COMMON_RULES}`,
-    user: `${task}${selfNote}\n\n[문서 텍스트 시작]\n${text}\n[문서 텍스트 끝]`,
+    user: `${task}${selfNote}\n\n${body}`,
   };
 }

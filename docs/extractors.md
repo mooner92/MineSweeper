@@ -18,7 +18,9 @@ Stage 3 는 형식을 모른다. 오직 **문서 유형의 차이**(`degree_thes
 | 모드 | 클래스 | 성격 | 용도 |
 |------|--------|------|------|
 | `stub` (기본) | `StubExtractor` | 결정론적·GPU 불필요·휴리스틱 | 개발 기본값, **모든 테스트가 쓰는 유일한 추출기** |
-| `vlm` | `VlmExtractor` | 온프레 비전/LLM (OpenAI 호환 엔드포인트) | 운영 경로, 스캔/이미지 문서까지 처리 |
+| `hybrid` | `HybridExtractor` | 텍스트=stub / 이미지=vlm 라우팅 | **현재 운용값**, 텍스트는 빠르게·이미지 문서는 OCR |
+| `vlm` | `VlmExtractor` | 온프레 비전/LLM (OpenAI 호환 엔드포인트) | 전수 VLM 비교/운영 경로 |
+| `ensemble` | `EnsembleExtractor` | 로컬 vLLM 다중 모델 투표 | 정밀도/필터링 강화(다중 VRAM 필요) |
 
 ---
 
@@ -102,9 +104,10 @@ export interface RawPerson {
 추출기 선택은 `src/lib/pipeline/extract/index.ts` 의 단일 함수가 담당한다.
 
 ```ts
-/** "stub"(기본) | "vlm"(단일 로컬 VLM) | "ensemble"(로컬 vLLM 다중 투표) */
+/** "stub"(기본) | "hybrid"(텍스트=stub/이미지=vlm) | "vlm"(단일 로컬 VLM) | "ensemble"(다중 투표) */
 export function getExtractor(mode: string = process.env.EXTRACTOR_MODE ?? 'stub'): Extractor {
   if (mode === 'ensemble') return new EnsembleExtractor();
+  if (mode === 'hybrid') return new HybridExtractor();
   if (mode === 'vlm') return new VlmExtractor();
   return new StubExtractor();
 }
@@ -113,14 +116,16 @@ export function getExtractor(mode: string = process.env.EXTRACTOR_MODE ?? 'stub'
 규칙은 간단하다.
 
 - `EXTRACTOR_MODE` 환경변수를 읽어 모드를 결정한다(인자로 직접 넘기면 그것이 우선).
-- `'ensemble'` → `EnsembleExtractor`(§3b), `'vlm'` → `VlmExtractor`(§3), 그 외 **모든 값**(`'stub'`,
-  빈 값, 오타 포함)은 `StubExtractor` 로 폴백한다. 즉 잘못된 설정이 들어와도 결정론적 안전 경로로 떨어진다.
+- `'ensemble'` → `EnsembleExtractor`(§3b), `'hybrid'` → `HybridExtractor`(§3d), `'vlm'` →
+  `VlmExtractor`(§3), 그 외 **모든 값**(`'stub'`, 빈 값, 오타 포함)은 `StubExtractor` 로 폴백한다.
+  즉 잘못된 설정이 들어와도 결정론적 안전 경로로 떨어진다.
 - 기본값은 `'stub'`.
 
 ```mermaid
 flowchart LR
   ENV["EXTRACTOR_MODE"] --> F{getExtractor}
   F -- "== 'ensemble'" --> E[EnsembleExtractor]
+  F -- "== 'hybrid'" --> H[HybridExtractor]
   F -- "== 'vlm'" --> V[VlmExtractor]
   F -- "그 외 모두" --> S[StubExtractor]
 ```
@@ -597,6 +602,27 @@ new EnsembleExtractor(configs, { minVotes, caller }) // caller 주입 → 목업
 
 > **라이브 확인**: GPU1의 `Qwen2.5-VL-7B-Instruct`(vLLM :8010)로 합성 인준서에서 이름 3건 + 도장
 > bbox(0.75,0.24) 감지 + 크롭 생성까지 end-to-end 통과.
+
+---
+
+## 3d. `HybridExtractor` — 텍스트/이미지 라우팅 (`EXTRACTOR_MODE=hybrid`) — 현재 운용값
+
+`src/lib/pipeline/extract/hybrid.ts`. 문서 **단위**로 추출기를 고른다:
+
+- **텍스트 레이어가 있는 페이지가 하나라도 있으면** → `StubExtractor`(빠르고 결정적, 깨끗한 인쇄 PDF에 최적).
+- **이미지 전용**(스캔 PDF / `hindex` 구글 스칼라 캡처처럼 텍스트가 없음) → `VlmExtractor`(이미지에서 이름 OCR).
+
+```ts
+extract(input: ExtractInput): Promise<RawPerson[]> {
+  const hasText = input.pages.some((p) => p.hasText && p.text.trim().length > 0);
+  return (hasText ? this.textExtractor : this.imageExtractor).extract(input);
+}
+```
+
+이유: `stub`은 이미지 문서에서 이름을 못 뽑고(§2.341), `vlm` 전수는 깨끗한 텍스트까지 GPU로 보내 느리다.
+하이브리드는 **둘의 장점만** 취한다 — 텍스트는 빠르게, 이미지 문서는 OCR로 커버. 공백만 있는 `hasText`
+페이지(빈 텍스트 레이어 스캔)는 이미지로 간주한다. 두 추출기는 주입형이라 GPU 없이 단위테스트
+(`tests/hybrid.test.ts`)로 라우팅을 검증한다. 마크 감지(§3c)는 추출 모드와 독립으로 함께 돈다.
 
 ---
 

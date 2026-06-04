@@ -6,12 +6,14 @@
 const path = require('node:path');
 const cwd = __dirname;
 
-// Shared environment. Flip EXTRACTOR_MODE to 'vlm' to use the on-prem Ollama model.
+// Shared environment. EXTRACTOR_MODE controls Stage-3 name extraction.
 const env = {
   NODE_ENV: 'production',
   DATABASE_URL: 'file:./data/minesweeper.db',
   UPLOAD_DIR: './data/uploads',
-  EXTRACTOR_MODE: 'stub', // 'stub' | 'vlm' | 'ensemble' (ensemble needs local vLLM servers — scripts/serve-ocr.sh)
+  // 'hybrid' = text-layer docs use the fast deterministic stub; image-only (scanned/hindex) docs
+  // are OCR'd by the local VLM. ('stub' = no GPU | 'vlm' = always VLM | 'ensemble' = multi-model.)
+  EXTRACTOR_MODE: 'hybrid',
   // Local vLLM Qwen2.5-VL on GPU1 (scripts/serve-ocr or systemd). Used by DETECT_MARKS + vlm mode.
   VLM_BASE_URL: 'http://localhost:8010/v1',
   VLM_API_KEY: 'local',
