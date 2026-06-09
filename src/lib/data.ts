@@ -15,6 +15,19 @@ import {
 } from '@/db/schema';
 import type { Bbox, DocType, SourceFormat } from '@/lib/domain';
 
+/**
+ * Display name: NFC-normalize; if it still contains standalone Hangul jamo, the name is decomposed
+ * and unrecoverable (e.g. compatibility jamo from an old mac zip — NFC can't recompose it and a
+ * heuristic recomposer would guess syllable boundaries wrong). Return null so the UI falls back to
+ * the readable doc-type label instead of showing 깨진 글자.
+ */
+export function readableName(filename: string | null | undefined): string | null {
+  if (!filename) return null;
+  const nfc = filename.normalize('NFC');
+  // U+1100–U+11FF conjoining jamo, U+3130–U+318F compatibility jamo = decomposed/garbled Hangul.
+  return /[ᄀ-ᇿ㄰-㆏]/.test(nfc) ? null : nfc;
+}
+
 export interface ApplicantSummary {
   id: string;
   name: string;
@@ -80,7 +93,13 @@ export async function getApplicantReview(id: string): Promise<ReviewData | null>
 /** A candidate name in an 동명이인/약어(ambiguous) flag, with the files/pages where it appeared. */
 export interface CandidateRef {
   name: string;
-  sources: { documentId: string; filename: string; docType: DocType; page: number }[];
+  sources: {
+    documentId: string;
+    filename: string;
+    docType: DocType;
+    page: number;
+    sourceFormat: SourceFormat;
+  }[];
 }
 
 export interface QueueItem {
@@ -122,6 +141,15 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
   ];
   const sourcesByName = new Map<string, CandidateRef['sources']>();
   if (ambiguousApps.length > 0) {
+    // documentId → sourceFormat, so the UI can render a page thumbnail (pdf/image) vs a placeholder
+    // (hwp/text, which we don't rasterize).
+    const docFmt = new Map<string, SourceFormat>();
+    for (const d of await db
+      .select({ id: documents.id, fmt: documents.sourceFormat })
+      .from(documents)
+      .where(inArray(documents.applicantId, ambiguousApps))) {
+      docFmt.set(d.id, d.fmt);
+    }
     const aggs = await db
       .select({
         applicantId: personAggregates.applicantId,
@@ -135,9 +163,12 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
         `${a.applicantId}::${a.canonicalName}`,
         (a.sources ?? []).map((s) => ({
           documentId: s.documentId,
-          filename: s.filename,
+          // Readable (NFC) name, or '' when the stored name is decomposed/garbled — UI then shows
+          // the doc-type label instead.
+          filename: readableName(s.filename) ?? '',
           docType: s.docType,
           page: s.page,
+          sourceFormat: docFmt.get(s.documentId) ?? 'pdf',
         })),
       );
     }
@@ -156,7 +187,7 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
       applicantId: r.flag.applicantId,
       applicantName: r.applicantName,
       documentId: r.flag.documentId,
-      filename: r.filename,
+      filename: readableName(r.filename),
       sourceFormat: r.sourceFormat,
       personName: r.personName,
       bbox: r.bbox ?? null,
