@@ -86,14 +86,30 @@ export default async function ReviewQueuePage({
                                 title={`${s.filename} · 클릭하면 원문 ${s.page}쪽`}
                                 className="block no-underline"
                               >
-                                {/* 해당 이름이 나온 페이지 썸네일(온디맨드 렌더·캐시). 클릭=원문 페이지. */}
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={`/api/page/${s.documentId}?page=${s.page}`}
-                                  alt={`${s.filename} p.${s.page}`}
-                                  loading="lazy"
-                                  className="h-40 w-auto rounded-seed border border-stroke bg-bg object-contain"
-                                />
+                                {s.sourceFormat === 'pdf' || s.sourceFormat === 'image' ? (
+                                  // 해당 이름이 나온 페이지 썸네일(온디맨드 렌더·캐시). 클릭=원문 페이지.
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={`/api/page/${s.documentId}?page=${s.page}`}
+                                    alt={`${DOC_TYPE_LABELS_KO[s.docType]} p.${s.page}`}
+                                    loading="lazy"
+                                    className="h-40 w-auto rounded-seed border border-stroke bg-bg object-contain"
+                                  />
+                                ) : (
+                                  // HWP 등 렌더 불가 포맷 — 깨진 이미지 대신 깔끔한 타일(원문 열기).
+                                  <div className="flex h-40 w-28 flex-col items-center justify-center gap-1 rounded-seed border border-stroke bg-bg-layer p-2 text-center">
+                                    <span className="text-2xl">📄</span>
+                                    <span className="text-[11px] font-semibold uppercase text-fg-muted">
+                                      {s.sourceFormat}
+                                    </span>
+                                    {s.filename && (
+                                      <span className="line-clamp-2 break-all text-[10px] text-fg-subtle">
+                                        {s.filename}
+                                      </span>
+                                    )}
+                                    <span className="text-xs text-accent">원문 보기</span>
+                                  </div>
+                                )}
                                 <span className="mt-0.5 block text-center text-xs text-fg-muted">
                                   {DOC_TYPE_LABELS_KO[s.docType]} p.{s.page}
                                 </span>
