@@ -97,6 +97,23 @@ def _ollama_loaded_model():
     return None
 
 
+def _gpu_totals():
+    """Per-GPU total/used/free VRAM (bytes) from nvidia-smi — for 'used of total' display."""
+    out = _run(
+        ["nvidia-smi", "--query-gpu=index,memory.total,memory.used,memory.free",
+         "--format=csv,noheader,nounits"]
+    )
+    rows = []
+    for line in out.strip().splitlines():
+        p = [x.strip() for x in line.split(",")]
+        if len(p) != 4:
+            continue
+        gpu, total, used, free = p
+        mib = 1024 * 1024
+        rows.append((gpu, int(float(total)) * mib, int(float(used)) * mib, int(float(free)) * mib))
+    return rows
+
+
 def collect():
     u2i = _uuid_to_index()
     out = _run(
@@ -131,7 +148,21 @@ def collect():
         )
         lines.append(f"gpu_model_vram_bytes{{{labels}}} {vram}")
         info.append(f"gpu_model_info{{{labels}}} 1")
-    return "\n".join(lines + info) + "\n"
+
+    totals = [
+        "# HELP gpu_vram_total_bytes Total VRAM on the GPU.",
+        "# TYPE gpu_vram_total_bytes gauge",
+        "# HELP gpu_vram_used_bytes VRAM in use on the GPU (all processes).",
+        "# TYPE gpu_vram_used_bytes gauge",
+        "# HELP gpu_vram_free_bytes Free VRAM on the GPU.",
+        "# TYPE gpu_vram_free_bytes gauge",
+    ]
+    for gpu, total, used, free in _gpu_totals():
+        totals.append(f'gpu_vram_total_bytes{{gpu="{_label(gpu)}"}} {total}')
+        totals.append(f'gpu_vram_used_bytes{{gpu="{_label(gpu)}"}} {used}')
+        totals.append(f'gpu_vram_free_bytes{{gpu="{_label(gpu)}"}} {free}')
+
+    return "\n".join(lines + info + totals) + "\n"
 
 
 class Handler(BaseHTTPRequestHandler):
