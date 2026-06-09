@@ -26,6 +26,19 @@ export interface MarkDetectionDeps {
   crop?: (srcPath: string, bbox: Bbox, outPath: string) => Promise<string | null>;
 }
 
+/**
+ * Doc types where 도장/서명/날인 actually occur: 학위논문 인준서, 연구과제 제출문. We do NOT run
+ * mark detection on google-scholar captures (hindex), journal PDFs, or 대표연구실적 — those never
+ * carry handwritten seals/signatures, and asking the VLM to localize "handwriting" in a dense
+ * screenshot produces false positives (the bug this fixes). Tunable via DETECT_MARK_DOCTYPES.
+ */
+const MARK_DOCTYPES = new Set<string>(
+  (process.env.DETECT_MARK_DOCTYPES ?? 'degree_thesis,research_project')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+
 /** Where marks live: thesis approval/cover (first 2 pages), everything else page 1. */
 function pagesToScan(docType: DocType): number[] {
   return docType === 'degree_thesis' ? [1, 2] : [1];
@@ -45,6 +58,7 @@ export async function runMarkDetection(
   const out = new Map<string, DocumentMark[]>();
   for (const doc of docs) {
     if (doc.format === 'hwp' || doc.format === 'text') continue; // nothing to rasterize
+    if (!MARK_DOCTYPES.has(doc.docType)) continue; // marks don't occur here (e.g. hindex/journal)
     const marks: DocumentMark[] = [];
     const pages = doc.format === 'image' ? [1] : pagesToScan(doc.docType);
 

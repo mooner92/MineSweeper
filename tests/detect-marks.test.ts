@@ -47,10 +47,25 @@ describe('runMarkDetection', () => {
     expect(calls.crop).toBe(1);
   });
 
-  it('journal: scans only page 1', async () => {
+  it('research_project (marks expected, non-thesis): scans only page 1', async () => {
     const { calls, deps } = makeDeps(sealOnPage1);
-    await runMarkDetection([doc({ documentId: 'd2', docType: 'journal_article' })], deps);
+    await runMarkDetection([doc({ documentId: 'd2', docType: 'research_project' })], deps);
     expect(calls.renderPdf).toEqual([1]);
+  });
+
+  it('skips doc types where seals/signatures do not occur (hindex/journal/대표연구실적)', async () => {
+    const { calls, deps } = makeDeps(sealOnPage1);
+    const out = await runMarkDetection(
+      [
+        doc({ documentId: 'h1', docType: 'hindex', format: 'image', filepath: '/s.png' }),
+        doc({ documentId: 'j1', docType: 'journal_article' }),
+        doc({ documentId: 'r1', docType: 'representative_research' }),
+      ],
+      deps,
+    );
+    expect(out.size).toBe(0); // no false handwriting/seal flags on a google-scholar capture etc.
+    expect(calls.renderPdf).toEqual([]);
+    expect(calls.renderImage).toBe(0);
   });
 
   it('image doc: uses image renderer, not pdf', async () => {
