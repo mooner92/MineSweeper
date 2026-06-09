@@ -76,17 +76,27 @@ export default async function ReviewQueuePage({
                         {c.sources.length === 0 ? (
                           <p className="text-xs text-fg-subtle">출처 없음</p>
                         ) : (
-                          <div className="mt-1 flex flex-wrap gap-1.5">
+                          <div className="mt-1 flex flex-wrap gap-2">
                             {c.sources.map((s, i) => (
                               <a
                                 key={`${s.documentId}-${s.page}-${i}`}
                                 href={`/api/file/${s.documentId}#page=${s.page}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                title={s.filename}
-                                className="seed-badge-neutral no-underline"
+                                title={`${s.filename} · 클릭하면 원문 ${s.page}쪽`}
+                                className="block no-underline"
                               >
-                                {DOC_TYPE_LABELS_KO[s.docType]} p.{s.page}
+                                {/* 해당 이름이 나온 페이지 썸네일(온디맨드 렌더·캐시). 클릭=원문 페이지. */}
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={`/api/page/${s.documentId}?page=${s.page}`}
+                                  alt={`${s.filename} p.${s.page}`}
+                                  loading="lazy"
+                                  className="h-40 w-auto rounded-seed border border-stroke bg-bg object-contain"
+                                />
+                                <span className="mt-0.5 block text-center text-xs text-fg-muted">
+                                  {DOC_TYPE_LABELS_KO[s.docType]} p.{s.page}
+                                </span>
                               </a>
                             ))}
                           </div>
