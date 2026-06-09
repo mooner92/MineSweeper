@@ -161,6 +161,7 @@ export async function processApplicant(
       }
     }
 
+    const seenAmbiguous = new Set<string>();
     for (const agg of result.aggregates) {
       await tx.insert(personAggregates).values({
         applicantId,
@@ -176,13 +177,22 @@ export async function processApplicant(
       });
 
       // Near-duplicate names (e.g. 이주영 vs 이조영) — surface for human disambiguation.
+      // One flag per candidate SET (not per direction): 정민/정민호 and 정민호/정민 are the same pair.
       if (agg.nameCandidates.length > 1) {
-        await tx.insert(reviewFlags).values({
-          applicantId,
-          flagType: 'ambiguous',
-          label: agg.nameCandidates.map((c) => c.name).join(' / '),
-          status: 'open',
-        });
+        const key = agg.nameCandidates
+          .map((c) => c.name)
+          .slice()
+          .sort()
+          .join('|');
+        if (!seenAmbiguous.has(key)) {
+          seenAmbiguous.add(key);
+          await tx.insert(reviewFlags).values({
+            applicantId,
+            flagType: 'ambiguous',
+            label: agg.nameCandidates.map((c) => c.name).join(' / '),
+            status: 'open',
+          });
+        }
       }
     }
   });
