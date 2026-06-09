@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { FLAG_TYPE_LABELS_KO, type FlagType } from '@/lib/domain';
+import { DOC_TYPE_LABELS_KO, FLAG_TYPE_LABELS_KO, type FlagType } from '@/lib/domain';
 import { getReviewQueue } from '@/lib/data';
 
 export const dynamic = 'force-dynamic';
@@ -53,6 +53,50 @@ export default async function ReviewQueuePage({
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((it) => (
             <li key={it.flag.id} className="seed-card overflow-hidden">
+              {it.flag.flagType === 'ambiguous' && it.candidates ? (
+                // 동명이인/약어: 후보 이름별로 원문 파일·페이지 링크를 나열해 비교하게 한다.
+                <div className="space-y-2 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="seed-badge-warning">{FLAG_TYPE_LABELS_KO.ambiguous}</span>
+                    <span className="text-xs text-fg-subtle">
+                      {it.applicantName ? (
+                        <Link href={`/applicants/${it.applicantId}`}>{it.applicantName}</Link>
+                      ) : (
+                        it.applicantId
+                      )}
+                    </span>
+                  </div>
+                  <p className="text-xs text-fg-muted">
+                    같은 사람인지 다른 사람인지 — 아래 원문 페이지를 열어 비교하세요.
+                  </p>
+                  <ul className="space-y-2">
+                    {it.candidates.map((c) => (
+                      <li key={c.name} className="rounded-seed border border-stroke p-2">
+                        <p className="text-sm font-semibold">{c.name}</p>
+                        {c.sources.length === 0 ? (
+                          <p className="text-xs text-fg-subtle">출처 없음</p>
+                        ) : (
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {c.sources.map((s, i) => (
+                              <a
+                                key={`${s.documentId}-${s.page}-${i}`}
+                                href={`/api/file/${s.documentId}#page=${s.page}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={s.filename}
+                                className="seed-badge-neutral no-underline"
+                              >
+                                {DOC_TYPE_LABELS_KO[s.docType]} p.{s.page}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <>
               <div className="relative aspect-[4/3] bg-bg-layer">
                 {it.flag.cropPath ? (
                   // Detected seal/signature region — show the crop directly (human eyeballs it).
@@ -115,6 +159,8 @@ export default async function ReviewQueuePage({
                   )}
                 </p>
               </div>
+                </>
+              )}
             </li>
           ))}
         </ul>

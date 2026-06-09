@@ -1,4 +1,4 @@
-import { count, desc, eq, sql } from 'drizzle-orm';
+import { count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from '@/db/client';
 import {
   applicants,
@@ -13,7 +13,7 @@ import {
   type PersonAggregate,
   type ReviewFlag,
 } from '@/db/schema';
-import type { Bbox, SourceFormat } from '@/lib/domain';
+import type { Bbox, DocType, SourceFormat } from '@/lib/domain';
 
 export interface ApplicantSummary {
   id: string;
@@ -77,6 +77,12 @@ export async function getApplicantReview(id: string): Promise<ReviewData | null>
   return { applicant, aggregates, documents: docs, job };
 }
 
+/** A candidate name in an 동명이인/약어(ambiguous) flag, with the files/pages where it appeared. */
+export interface CandidateRef {
+  name: string;
+  sources: { documentId: string; filename: string; docType: DocType; page: number }[];
+}
+
 export interface QueueItem {
   flag: ReviewFlag;
   applicantId: string;
@@ -86,6 +92,8 @@ export interface QueueItem {
   sourceFormat: SourceFormat | null;
   personName: string | null;
   bbox: Bbox | null;
+  /** For ambiguous flags: each candidate name + the source files/pages to compare. */
+  candidates?: CandidateRef[];
 }
 
 export async function getReviewQueue(): Promise<QueueItem[]> {
@@ -106,14 +114,53 @@ export async function getReviewQueue(): Promise<QueueItem[]> {
     .where(eq(reviewFlags.status, 'open'))
     .orderBy(reviewFlags.applicantId, desc(reviewFlags.createdAt));
 
-  return rows.map((r) => ({
-    flag: r.flag,
-    applicantId: r.flag.applicantId,
-    applicantName: r.applicantName,
-    documentId: r.flag.documentId,
-    filename: r.filename,
-    sourceFormat: r.sourceFormat,
-    personName: r.personName,
-    bbox: r.bbox ?? null,
-  }));
+  // For 동명이인/약어(ambiguous) flags, attach the source files/pages of each candidate name so the
+  // reviewer can open the originals side by side. The candidate names are the flag's label
+  // ("김용 / 김용표"); their sources live on person_aggregates.
+  const ambiguousApps = [
+    ...new Set(rows.filter((r) => r.flag.flagType === 'ambiguous').map((r) => r.flag.applicantId)),
+  ];
+  const sourcesByName = new Map<string, CandidateRef['sources']>();
+  if (ambiguousApps.length > 0) {
+    const aggs = await db
+      .select({
+        applicantId: personAggregates.applicantId,
+        canonicalName: personAggregates.canonicalName,
+        sources: personAggregates.sources,
+      })
+      .from(personAggregates)
+      .where(inArray(personAggregates.applicantId, ambiguousApps));
+    for (const a of aggs) {
+      sourcesByName.set(
+        `${a.applicantId}::${a.canonicalName}`,
+        (a.sources ?? []).map((s) => ({
+          documentId: s.documentId,
+          filename: s.filename,
+          docType: s.docType,
+          page: s.page,
+        })),
+      );
+    }
+  }
+
+  return rows.map((r) => {
+    let candidates: CandidateRef[] | undefined;
+    if (r.flag.flagType === 'ambiguous' && r.flag.label) {
+      candidates = r.flag.label.split(' / ').map((name) => {
+        const n = name.trim();
+        return { name: n, sources: sourcesByName.get(`${r.flag.applicantId}::${n}`) ?? [] };
+      });
+    }
+    return {
+      flag: r.flag,
+      applicantId: r.flag.applicantId,
+      applicantName: r.applicantName,
+      documentId: r.flag.documentId,
+      filename: r.filename,
+      sourceFormat: r.sourceFormat,
+      personName: r.personName,
+      bbox: r.bbox ?? null,
+      candidates,
+    };
+  });
 }
