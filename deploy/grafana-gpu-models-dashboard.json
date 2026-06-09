@@ -20,16 +20,56 @@
   "tags": ["gpu", "models"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
   "time": { "from": "now-5m", "to": "now" },
   "panels": [
     {
       "id": 1,
+      "type": "bargauge",
+      "title": "GPU VRAM 사용량 (카드 총량 대비)",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 0 },
+      "description": "막대=사용 중 VRAM, 끝=카드 총량(약 48GB). 색: 80%↑ 노랑, 92%↑ 빨강.",
+      "targets": [
+        {
+          "expr": "gpu_vram_used_bytes",
+          "format": "time_series",
+          "instant": true,
+          "legendFormat": "GPU {{gpu}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "min": 0,
+          "max": 48305799168,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 38644639334 },
+              { "color": "red", "value": 44441335234 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "minVizHeight": 24
+      }
+    },
+    {
+      "id": 2,
       "type": "table",
       "title": "GPU별 적재 모델",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 7 },
       "targets": [
         { "expr": "gpu_model_vram_bytes", "format": "table", "instant": true, "refId": "A" }
       ],
@@ -37,55 +77,34 @@
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true },
-            "indexByName": { "gpu": 0, "model": 1, "framework": 2, "port": 3, "pid": 4, "Value": 5 },
+            "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true, "pid": true },
+            "indexByName": { "gpu": 0, "model": 1, "framework": 2, "port": 3, "Value": 4 },
             "renameByName": {
               "gpu": "GPU",
               "model": "모델",
               "framework": "프레임워크",
               "port": "포트",
-              "pid": "PID",
-              "Value": "VRAM"
+              "Value": "VRAM 사용"
             }
           }
         },
-        { "id": "sortBy", "options": { "fields": "", "sort": [{ "field": "GPU" }] } }
+        { "id": "sortBy", "options": { "sort": [{ "field": "GPU" }] } }
       ],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "VRAM" },
+            "matcher": { "id": "byName", "options": "VRAM 사용" },
             "properties": [
               { "id": "unit", "value": "decbytes" },
               { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "gradient" } },
-              { "id": "max", "value": 48318382080 }
+              { "id": "min", "value": 0 },
+              { "id": "max", "value": 48305799168 }
             ]
           }
         ]
       },
       "options": { "showHeader": true, "cellHeight": "sm" }
-    },
-    {
-      "id": 2,
-      "type": "bargauge",
-      "title": "모델별 VRAM",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 9 },
-      "targets": [
-        {
-          "expr": "gpu_model_vram_bytes",
-          "format": "time_series",
-          "instant": true,
-          "legendFormat": "GPU{{gpu}} · {{model}} (:{{port}})",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": { "unit": "decbytes", "min": 0, "max": 48318382080 },
-        "overrides": []
-      },
-      "options": { "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true }
     }
   ]
 }
