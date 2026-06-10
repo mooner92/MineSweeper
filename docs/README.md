@@ -35,3 +35,5 @@ Minesweeper — 채용 이해충돌 관계자 추출 시스템의 상세 문서 
 - **"테이블/컬럼이 뭐가 있나?"** → [data-model.md](./data-model.md)
 - **"공공기관에 배포해도 되나?"** → [security.md](./security.md)
 - **"기여/확장하려면?"** → [development.md](./development.md)
+- **"어느 GPU에 어떤 모델이 떠 있나?"** → 루트 [`deploy/`](../deploy) (Prometheus 익스포터 + Grafana 대시보드) · [deployment.md](./deployment.md)
+- **"운영 데이터 정리(중복/재집계)는?"** → 루트 [`scripts/`](../scripts) `dedupe-applicants.ts` · `reaggregate-applicant.ts`
