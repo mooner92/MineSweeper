@@ -51,7 +51,7 @@ export function Bullets({ items }: { items: ReactNode[] }) {
 export function Faq({ q, children }: { q: string; children: ReactNode }) {
   return (
     <details className="group seed-card overflow-hidden">
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-3 text-sm font-semibold text-fg [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-3 text-sm font-semibold text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
         <span>
           <span className="text-accent">Q. </span>
           {q}

@@ -33,7 +33,11 @@ export function Footer() {
           <div className="flex flex-col items-start gap-3 sm:items-end">
             <nav className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-fg-muted">
               {LINKS.map((l) => (
-                <Link key={l.href} href={l.href} className="no-underline hover:text-fg">
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className="no-underline underline-offset-2 hover:text-fg hover:underline"
+                >
                   {l.label}
                 </Link>
               ))}

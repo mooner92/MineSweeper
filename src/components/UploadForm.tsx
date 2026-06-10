@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { type FormEvent, useState } from 'react';
+import { type DragEvent, type FormEvent, useRef, useState } from 'react';
 
 interface StatusResponse {
   status: string;
@@ -28,8 +28,12 @@ function isDirectHost(): boolean {
 
 export function UploadForm() {
   const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function poll(applicantId: string): Promise<void> {
@@ -37,18 +41,34 @@ export function UploadForm() {
       const r = await fetch(`/api/status/${applicantId}`, { cache: 'no-store' });
       if (r.ok) {
         const s = (await r.json()) as StatusResponse;
-        setStatus(`추출 ${s.status} (${s.progress ?? 0}%)`);
+        setStatus(`추출 ${s.status}`);
+        setProgress(s.progress ?? 0);
         if (s.status === 'done' || s.status === 'error') return;
       }
       await new Promise((res) => setTimeout(res, 1000));
     }
   }
 
+  function pick(f: File | undefined | null): void {
+    setError(null);
+    if (!f) return;
+    if (!/\.zip$/i.test(f.name)) {
+      setError('zip 파일만 업로드할 수 있습니다.');
+      return;
+    }
+    setFile(f);
+  }
+
+  function onDrop(e: DragEvent<HTMLDivElement>): void {
+    e.preventDefault();
+    setDragOver(false);
+    if (busy) return;
+    pick(e.dataTransfer.files?.[0]);
+  }
+
   async function onSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
     setError(null);
-    const input = e.currentTarget.elements.namedItem('file') as HTMLInputElement | null;
-    const file = input?.files?.[0];
     if (!file) {
       setError('zip 파일을 선택하세요.');
       return;
@@ -66,6 +86,7 @@ export function UploadForm() {
 
     setBusy(true);
     setStatus('업로드 중…');
+    setProgress(null);
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -103,23 +124,86 @@ export function UploadForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-wrap items-center gap-3">
-      <input
-        type="file"
-        name="file"
-        accept=".zip"
-        disabled={busy}
-        className="block text-sm text-fg-muted file:mr-3 file:rounded-seed file:border-0 file:bg-bg-layer file:px-3 file:py-2 file:text-sm file:font-semibold file:text-fg"
-      />
-      <button type="submit" className="seed-btn-primary" disabled={busy}>
-        업로드 &amp; 추출
-      </button>
-      <p className="w-full text-xs text-fg-subtle">
-        공개 도메인 업로드는 약 100MB까지입니다. 더 큰 압축파일은 내부망 직접 주소(:3100)로
-        접속하거나 zip을 나눠 올려주세요.
-      </p>
-      {status && <p className="w-full text-sm text-fg-muted">{status}</p>}
-      {error && <p className="w-full text-sm font-medium text-danger">{error}</p>}
+    <form onSubmit={onSubmit} className="space-y-3">
+      {/* Drop zone doubles as the file picker — click or drag a zip onto it. */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="zip 파일 선택 또는 드래그하여 업로드"
+        onClick={() => !busy && inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if ((e.key === 'Enter' || e.key === ' ') && !busy) {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (!busy) setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+        className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-seed-lg border-2 border-dashed px-6 py-8 text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+          dragOver
+            ? 'border-accent bg-accent-subtle'
+            : file
+              ? 'border-stroke-strong bg-bg-layer/50'
+              : 'border-stroke bg-bg-layer/30 hover:border-stroke-strong hover:bg-bg-layer/60'
+        } ${busy ? 'pointer-events-none opacity-60' : ''}`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          name="file"
+          accept=".zip"
+          disabled={busy}
+          className="hidden"
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => pick(e.target.files?.[0])}
+        />
+        {file ? (
+          <>
+            <p className="text-sm font-semibold text-fg">📦 {file.name}</p>
+            <p className="text-xs text-fg-subtle">
+              {(file.size / MB).toFixed(1)}MB · 다른 파일을 선택하려면 클릭
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-semibold text-fg-muted">
+              zip 파일을 여기에 끌어다 놓거나 <span className="text-accent">클릭해서 선택</span>
+            </p>
+            <p className="text-xs text-fg-subtle">지원자 1명의 첨부서류 압축파일 (.zip)</p>
+          </>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" className="seed-btn-primary" disabled={busy || !file}>
+          {busy ? '처리 중…' : '업로드 & 추출'}
+        </button>
+        <p className="text-xs text-fg-subtle">
+          공개 도메인 업로드는 약 100MB까지 — 더 큰 파일은 내부망 직접 주소(:3100) 또는 zip 분할.
+        </p>
+      </div>
+
+      {status && (
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium text-accent">
+            {status}
+            {progress != null ? ` (${progress}%)` : ''}
+          </p>
+          {progress != null && (
+            <div className="h-2 w-full max-w-md overflow-hidden rounded-full bg-bg-layer">
+              <div
+                className="h-full rounded-full bg-accent transition-all duration-500"
+                style={{ width: `${Math.max(progress, 4)}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+      {error && <p className="text-sm font-medium text-danger">{error}</p>}
     </form>
   );
 }

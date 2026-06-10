@@ -23,10 +23,13 @@ export default async function ReviewQueuePage({
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">검토 필요 큐</h1>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold">검토 필요 큐</h1>
+            {items.length > 0 && <span className="seed-badge-warning">{items.length}건</span>}
+          </div>
           <p className="text-sm text-fg-muted">
-            도장·손글씨·판독난해 서명·비전 판독 필요 항목을 한 곳에 모았습니다. ({items.length})
+            도장·손글씨·판독난해 서명·비전 판독 필요 항목을 한 곳에 모았습니다.
           </p>
         </div>
         <a className="seed-btn-neutral no-underline" href={exportHref}>
@@ -48,7 +51,12 @@ export default async function ReviewQueuePage({
       </div>
 
       {items.length === 0 ? (
-        <p className="seed-card p-6 text-sm text-fg-muted">검토 대기 항목이 없습니다.</p>
+        <div className="seed-card p-10 text-center">
+          <p className="text-base text-fg-muted">검토 대기 항목이 없습니다. 🎉</p>
+          <p className="mt-1 text-sm text-fg-subtle">
+            도장·서명·동명이인 항목이 생기면 여기에 모입니다.
+          </p>
+        </div>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((it) => (
@@ -99,15 +107,15 @@ export default async function ReviewQueuePage({
                                   // HWP 등 렌더 불가 포맷 — 깨진 이미지 대신 깔끔한 타일(원문 열기).
                                   <div className="flex h-40 w-28 flex-col items-center justify-center gap-1 rounded-seed border border-stroke bg-bg-layer p-2 text-center">
                                     <span className="text-2xl">📄</span>
-                                    <span className="text-[11px] font-semibold uppercase text-fg-muted">
+                                    <span className="text-xs font-semibold uppercase text-fg-muted">
                                       {s.sourceFormat}
                                     </span>
                                     {s.filename && (
-                                      <span className="line-clamp-2 break-all text-[10px] text-fg-subtle">
+                                      <span className="line-clamp-2 break-all text-xs text-fg-subtle">
                                         {s.filename}
                                       </span>
                                     )}
-                                    <span className="text-xs text-accent">원문 보기</span>
+                                    <span className="text-xs font-medium text-accent">원문 보기</span>
                                   </div>
                                 )}
                                 <span className="mt-0.5 block text-center text-xs text-fg-muted">
@@ -206,10 +214,16 @@ function FilterChip({
   active: boolean;
   count: number;
 }) {
+  const chip =
+    'inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors';
   return (
     <Link
       href={href}
-      className={`no-underline ${active ? 'seed-badge bg-accent text-fg-oncolor' : 'seed-badge-neutral'}`}
+      className={`no-underline ${
+        active
+          ? `${chip} bg-accent text-fg-oncolor`
+          : `${chip} border border-stroke bg-bg text-fg-muted hover:bg-bg-layer`
+      }`}
     >
       {label} {count}
     </Link>

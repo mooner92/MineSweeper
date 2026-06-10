@@ -35,6 +35,9 @@ export interface ApplicantSummary {
   createdAt: Date;
   total: number;
   needsHuman: number;
+  docCount: number;
+  /** Latest extraction job status ('queued' | 'running' | 'done' | 'error'), null when none. */
+  jobStatus: string | null;
 }
 
 export async function getApplicants(): Promise<ApplicantSummary[]> {
@@ -47,12 +50,19 @@ export async function getApplicants(): Promise<ApplicantSummary[]> {
       createdAt: applicants.createdAt,
       total: count(personAggregates.id),
       needsHuman: sql<number>`coalesce(sum(case when ${personAggregates.needsHuman} then 1 else 0 end), 0)`,
+      docCount: sql<number>`(select count(*) from ${documents} where ${documents.applicantId} = ${applicants.id})`,
+      jobStatus: sql<string | null>`(select status from ${jobs} where json_extract(${jobs.payload}, '$.applicantId') = ${applicants.id} order by ${jobs.createdAt} desc limit 1)`,
     })
     .from(applicants)
     .leftJoin(personAggregates, eq(personAggregates.applicantId, applicants.id))
     .groupBy(applicants.id)
     .orderBy(desc(applicants.createdAt));
-  return rows.map((r) => ({ ...r, total: Number(r.total), needsHuman: Number(r.needsHuman) }));
+  return rows.map((r) => ({
+    ...r,
+    total: Number(r.total),
+    needsHuman: Number(r.needsHuman),
+    docCount: Number(r.docCount),
+  }));
 }
 
 export interface ReviewData {

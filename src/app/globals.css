@@ -42,6 +42,7 @@
   }
   .seed-btn {
     @apply inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-seed px-3.5 py-2 text-sm font-semibold transition-colors;
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
   }
   .seed-btn-primary {
     @apply seed-btn bg-accent text-fg-oncolor hover:bg-accent-pressed disabled:opacity-50;
@@ -50,7 +51,12 @@
     @apply seed-btn border border-stroke bg-bg text-fg hover:bg-bg-layer disabled:opacity-50;
   }
   .seed-btn-ghost {
-    @apply seed-btn text-fg-muted hover:bg-bg-layer;
+    @apply seed-btn text-fg-muted hover:bg-bg-layer disabled:opacity-50;
+  }
+  /* Form controls share the button focus ring + disabled treatment. */
+  .seed-input {
+    @apply rounded-seed border border-stroke bg-bg px-3 py-1.5 text-sm transition-colors;
+    @apply hover:border-stroke-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50;
   }
   .seed-badge {
     @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold;

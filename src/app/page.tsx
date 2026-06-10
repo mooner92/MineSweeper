@@ -4,6 +4,8 @@ import { getApplicants } from '@/lib/data';
 
 export const dynamic = 'force-dynamic';
 
+const dateFmt = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeZone: 'Asia/Seoul' });
+
 export default async function HomePage() {
   const list = await getApplicants();
   return (
@@ -22,29 +24,46 @@ export default async function HomePage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold">지원자 ({list.length})</h2>
         {list.length === 0 ? (
-          <p className="seed-card p-6 text-sm text-fg-muted">아직 업로드된 지원자가 없습니다.</p>
+          <div className="seed-card p-10 text-center">
+            <p className="text-base text-fg-muted">아직 업로드된 지원자가 없습니다.</p>
+            <p className="mt-1 text-sm text-fg-subtle">위에서 지원자 ZIP을 올리면 자동으로 추출이 시작됩니다.</p>
+          </div>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2">
-            {list.map((a) => (
-              <li key={a.id}>
-                <Link
-                  href={`/applicants/${a.id}`}
-                  className="seed-card block p-4 no-underline transition-colors hover:border-stroke-strong"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-fg">{a.name}</span>
-                    {a.needsHuman > 0 ? (
-                      <span className="seed-badge-warning">미확인 {a.needsHuman}</span>
-                    ) : (
-                      <span className="seed-badge-success">검토 가능</span>
-                    )}
-                  </div>
-                  <p className="mt-1 text-sm text-fg-muted">
-                    관계자 {a.total}명{a.round ? ` · ${a.round}` : ''}
-                  </p>
-                </Link>
-              </li>
-            ))}
+            {list.map((a) => {
+              const running = a.jobStatus === 'queued' || a.jobStatus === 'running';
+              return (
+                <li key={a.id}>
+                  <Link
+                    href={`/applicants/${a.id}`}
+                    className="seed-card block p-4 no-underline transition-colors hover:border-stroke-strong hover:bg-bg-layer/40"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate font-semibold text-fg">{a.name}</span>
+                      {running ? (
+                        <span className="seed-badge-neutral shrink-0">
+                          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />
+                          추출 중
+                        </span>
+                      ) : a.jobStatus === 'error' ? (
+                        <span className="seed-badge-danger shrink-0">추출 오류</span>
+                      ) : a.needsHuman > 0 ? (
+                        <span className="seed-badge-warning shrink-0">미확인 {a.needsHuman}</span>
+                      ) : (
+                        <span className="seed-badge-success shrink-0">검토 가능</span>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-sm text-fg-muted">
+                      관계자 <span className="font-semibold text-fg">{a.total}</span>명
+                      {a.round ? ` · 회차 ${a.round}` : ''}
+                    </p>
+                    <p className="mt-1 text-xs text-fg-subtle">
+                      문서 {a.docCount}건 · {dateFmt.format(a.createdAt)} 업로드
+                    </p>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
