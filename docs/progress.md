@@ -41,7 +41,7 @@
 | **타이핑 텍스트** PDF에서 추출 | ✅ | `ingest/pdf.ts` 텍스트레이어 추출(pdfjs) → LLM/휴리스틱 추출 |
 | 도장/서명/필기체 **위치 감지** | ✅ | 로컬 vLLM(Qwen2.5-VL)로 **"있다/어디" 감지**→크롭→검토 큐(`DETECT_MARKS=1`). 라이브 확인됨 |
 | **필기체(한글) 글자 읽기** | 🟡 | 감지는 됨(위). 전서체/손글씨 *인식*은 자동확정 금지·검출→사람(설계상). 정식 OCR은 [개선계획](./improvement-plan-ocr.md) |
-| 영문 이름 → **한글 여러 개 병기** | 🟡 | 1.5a 구현: 근접중복(editDist≤1) `nameCandidates` + 검토 UI 후보 드롭다운(`이주영`↔`이조영` 자동병합 없이 사람이 선택). 엔진 n-best(VLM 다중 한글표기)는 1.5b |
+| 영문 이름 → **한글 여러 개 병기** | 🟡 | 1.5a 구현: 근접중복(**같은 성씨 + 자모 1자 차이**) `nameCandidates` + 검토 UI 후보 드롭다운(`이주영`↔`이조영` 자동병합 없이 사람이 선택). 엔진 n-best(VLM 다중 한글표기)는 1.5b |
 | **한자 논문 앞 페이지**만 처리 | 🟡 | 학위논문은 표지/앞 1–2p만 파싱(`extractThesis`). 한자 전용 라우팅은 미세조정 여지 |
 | 스캔 PDF / 이미지(hindex) OCR | 🟡 | 도장/서명 감지는 라이브 동작. 이미지 *이름 OCR*은 `EXTRACTOR_MODE=vlm`로 켜면 동작(라이브 확인), 기본은 stub |
 
@@ -78,19 +78,21 @@
 - ⬜ **[보안] 외부 API 가부 결정** (차단요소) · ⬜ 온프레 GPU 확보 · ⬜ 합격자 3명분 샘플 확보
 
 ### Phase 1 — MVP  ✅ `█████████░`
-- ✅ 1단 Ingest(pdf 텍스트레이어·image·hwp placeholder·text), 2단 Type 분류, 3단 Extract(stub+VLM
-  클라이언트), 4단 Aggregate(dedup·역할합집합·본인제외·보수적 매칭·자간 정규화)
-- ✅ 임베디드 DB(libsql+Drizzle 7테이블) · 백그라운드 워커·작업 큐
-- ✅ 검토 UI(seed-design): 지원자별 검토(배지·출처 링크), **검토 필요 큐**(도장/손글씨, 필터·bbox·CSV)
-- ✅ 명단 내보내기(CSV/Excel) · ✅ 51 테스트 green · ✅ PM2 배포(:3100)
-- 🟡 VLM(vision) 경로 와이어드이나 **실데이터 미검증** · 🟡 한자/앞페이지 미세조정 여지
+- ✅ 1단 Ingest(pdf 텍스트레이어·image·**hwp/hwpx 텍스트추출**·text), 2단 Type 분류, 3단 Extract(stub+VLM
+  클라이언트), 4단 Aggregate(dedup·역할합집합·본인제외·보수적 매칭·자간 정규화·**자모 단위 동명이인 후보**)
+- ✅ 임베디드 DB(libsql+Drizzle 7테이블, 지원자 `external_id`로 중복 식별) · 백그라운드 워커·작업 큐
+- ✅ 검토 UI(seed-design): 지원자별 검토(**관계 유형별 그룹 + 필터 칩 + 문서별 인원 태그**, 배지·출처 링크),
+  **검토 필요 큐**(도장/손글씨/동명이인, 인라인 썸네일·필터·bbox·CSV)
+- ✅ 명단 내보내기(CSV/Excel) · ✅ **102 테스트 green** · ✅ PM2 배포(:3100) · ✅ GPU 모니터링(Prometheus+Grafana)
+- ✅ 실합격자 ZIP end-to-end 검증(문서 13건, PDF+HWP+이미지 → 관계인 50여 명) · 🟡 한자/앞페이지 미세조정 여지
 
 ### Phase 1.5 — 어려운 영역 OCR  🟡 `█████░░░░░` (1.5a + 도장/서명 감지 라이브, OCR·앙상블은 부분)
 - ✅ **1.5a(텍스트 기반, 모델/의존성/런타임 추가 0)**: 공유 폼체크 헬퍼(`form-check.ts`),
-  이름 퍼지(`editDistance`/`fuzzyMatchWithin`) + gazetteer 근접중복 → `nameCandidates`(검토 UI
-  후보 드롭다운, 자동병합 금지), 카테고리별 임계값 + **confirmed-is-advisory 불변식**(공유
+  이름 근접중복(`jamoEditDistance`/`koreanNearDuplicates` — **자모 분해 후 1자 차이=오인식, 통째 음절
+  접두=약어**, 같은 성씨만) → `nameCandidates`(검토 UI 후보, 자동병합 금지. `이주영↔이조영`은 묶고
+  `김진영↔김진석`은 안 묶음), 카테고리별 임계값 + **confirmed-is-advisory 불변식**(공유
   `review-policy.computeNeedsHuman`, 두 사이트), 자기보고 confidence=advisory, `crossCheck` 스켈레톤
-  (비-thesis NO-OP), `scripts/eval.ts` 검토량 baseline(`npm run eval`). 69 테스트 green.
+  (비-thesis NO-OP), `scripts/eval.ts` 검토량 baseline(`npm run eval`). **102 테스트 green**.
 - ✅ **도장/서명/손글씨 감지(로컬 vLLM, 라이브 동작 확인)**: GPU1에 **Qwen2.5-VL-7B-Instruct**를
   vLLM(:8010)로 띄우고, 관련 페이지를 이미지로 렌더(`render.ts`, pdf-to-img+@napi-rs/canvas) → VLM에
   **"도장/서명 위치(bbox)"를 질의**(`extract/detect.ts`, 글자는 안 읽음) → bbox 크롭 → `review_flags`(crop)
@@ -102,8 +104,16 @@
   printed↔seal 교차검증·평가 플라이휠은 [개선계획](./improvement-plan-ocr.md) 따라 단계 진행.
 
 ### Phase 2 — 확장  ⬜ `░░░░░░░░░░`
-- ⬜ 소속 자동검색 · ⬜ 내부직원 관계(조직/인사 데이터) · ⬜ 인사혁신처 DB(Computer Use) · ⬜ HWP/HWPX
-  정식 어댑터 · ⬜ 도장 전용 엔진/파인튜닝
+- ⬜ 소속 자동검색 · ⬜ 내부직원 관계(조직/인사 데이터) · ⬜ 인사혁신처 DB(Computer Use)
+- 🟡 HWP/HWPX — **텍스트 추출은 완료**(`cfb`+`zlib`/`adm-zip`), 내부 도장·서명 **렌더 감지**는 미착수
+- ⬜ 도장 전용 엔진/파인튜닝
+
+### 최근 추가 (2026-06)
+- ✅ **HWP/HWPX 텍스트 추출**(순수 Node, 외부변환·sudo 불필요) · 한글 ZIP 견고성(CP949/NFD/장문 파일명/임의 폴더구조)
+- ✅ **자모 단위 동명이인/약어 판정** — 음절 단위 오판(`김진영↔김진석`) 제거, `이주영↔이조영`·`김용↔김용표`만 후보
+- ✅ **지원자 중복 제거** — 같은 지원번호(`external_id`) 재업로드 시 덮어쓰기(1지원자=1카드)
+- ✅ **검토 화면 분류** — 관계 유형별 그룹 + 필터 칩(전체·검토필요·역할별) + 문서별 인원 태그
+- ✅ **GPU 모니터링** — GPU→모델 매핑 Prometheus 익스포터 + Grafana 대시보드(`deploy/`)
 
 ---
 
