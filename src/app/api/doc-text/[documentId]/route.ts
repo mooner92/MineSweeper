@@ -22,9 +22,12 @@ export async function GET(_req: Request, { params }: { params: { documentId: str
   }
 
   try {
-    // Dynamic import keeps the parser out of routes that never need it.
-    const { ingest } = await import('@/lib/pipeline/ingest');
-    const result = await ingest(doc.filepath, doc.sourceFormat);
+    // Import ONLY the hwp/text adapters — pulling the ingest dispatcher would drag the PDF
+    // parser (pdfjs worker reference) into this bundle and trip a Next build warning.
+    const result =
+      doc.sourceFormat === 'hwp'
+        ? (await import('@/lib/pipeline/ingest/hwp')).ingestHwp(doc.filepath)
+        : (await import('@/lib/pipeline/ingest/text')).ingestText(doc.filepath);
     const text = result.pages
       .map((p) => p.text)
       .join('\n\n')

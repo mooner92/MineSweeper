@@ -111,7 +111,7 @@ npm run dev:all               # 웹(:3000) + 워커 동시 기동
 | `npm run db:migrate` | 마이그레이션 적용 |
 | `npm run build` / `npm start` | 프로덕션 빌드 / 기동 |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | vitest — 파이프라인 전 구간 (**102 테스트**) |
+| `npm test` | vitest — 파이프라인·인증 전 구간 (**108 테스트**) |
 | `npm run eval` | 추출 결과 검토량 baseline 측정 (`scripts/eval.ts`) |
 | `npm run detect:smoke` | 도장/서명 감지 스모크 (`scripts/detect-smoke.ts`) |
 
@@ -121,6 +121,7 @@ npm run dev:all               # 웹(:3000) + 워커 동시 기동
 
 | 스크립트 | 설명 |
 |---|---|
+| `create-user.ts <아이디> <비밀번호>` | 로그인 계정 생성/비밀번호 변경 (+ 최초 실행 시 `AUTH_SECRET`을 `.env`에 생성) |
 | `dedupe-applicants.ts` | 기존 데이터의 지원자 중복 1회 정리 — 지원번호 백필 + 표시명 정리 + 중복(최신 유지) 제거 |
 | `reaggregate-applicant.ts <지원번호\|id\|all>` | 저장된 추출결과로 **4단 집계만** 재실행(VLM 재추출 없이). 집계 로직·지원자명 변경 후 명단·동명이인 플래그 갱신 |
 | `serve-ocr.sh` · `download-ocr-models.sh` | 로컬 vLLM(OCR) 기동 / 모델 다운로드 |
@@ -131,8 +132,9 @@ npm run dev:all               # 웹(:3000) + 워커 동시 기동
 
 ```bash
 npm install
-npm run build
 npm run db:migrate
+npx tsx scripts/create-user.ts <아이디> <비밀번호>   # 로그인 계정 + AUTH_SECRET(.env) 생성 — build 전에!
+npm run build
 pm2 start ecosystem.config.cjs   # minesweeper-web(:3100) + minesweeper-worker
 pm2 save                         # 프로세스 목록 저장(재시작 복구)
 # (선택) 부팅 자동시작: pm2 startup → 출력되는 sudo 명령 실행 후 pm2 save
@@ -186,8 +188,9 @@ ingress:
 
 실행: `cloudflared tunnel run minesweeper` (상시화는 `sudo cloudflared service install`). 도메인 없이 빠른 테스트는 `cloudflared tunnel --url http://localhost:3100`.
 
-> ⚠️ **자체 인증이 없습니다(Phase 1).** 터널을 그대로 공개하면 지원자 PII가 노출됩니다. 반드시 해당 hostname에
-> **Cloudflare Access(Zero Trust)** 정책을 걸어 접근을 제한하세요. 자세한 내용: [docs/deployment.md](./docs/deployment.md) · [docs/security.md](./docs/security.md)
+> 🔐 **로컬 로그인이 기본 적용**됩니다(아래 보안 절) — 모든 페이지·API가 로그인 없이는 차단됩니다. 다만 단일
+> 공용 계정·무차별 대입 제한 없음 수준이므로, 터널을 공개할 땐 **Cloudflare Access(Zero Trust)** 정책을 추가로
+> 거는 것을 권장합니다. 자세한 내용: [docs/deployment.md](./docs/deployment.md) · [docs/security.md](./docs/security.md)
 
 ## 검토 UI
 
@@ -196,7 +199,9 @@ ingress:
    **인쇄·고신뢰 = 초록 "자동 통과"** / **비인쇄·저신뢰 = 노랑 "미확인"**, **동명이인/약어 후보 병기**, 확인/수정/제외,
    **본인 자동 제외**. 교정 내역은 `corrections` 에 적재.
 3. **검토 필요 큐** — 도장·손글씨·비전판독 필요 항목을 크롭 갤러리로 모아보기.
-4. **명단 내보내기** — 지원자별 최종 명단을 **CSV / Excel** 로(심사위원 풀 대조용). 본인·제외 항목은 빠집니다.
+4. **문서 슬라이드 뷰어** — 문서 카드 클릭 시 우측 패널로 원문 미리보기(PDF=내장 뷰어, 이미지=원본,
+   HWP/텍스트=추출 텍스트 읽기 전용) + 다운로드·새 탭. ESC/오버레이로 닫기.
+5. **명단 내보내기** — 지원자별 최종 명단을 **CSV / Excel** 로(심사위원 풀 대조용). 본인·제외 항목은 빠집니다.
 
 ## 데이터 모델 (요약)
 
@@ -211,9 +216,11 @@ ingress:
 
 ## 보안 / 배포
 
-- **인증은 Phase 1 범위 밖**입니다. 리소스는 id로 접근되므로(파일·명단·상태 API) **서버에 접근 가능한
-  사람은 지원자 PII를 열람**할 수 있습니다 → **반드시 내부망에만 배포**하고, 필요 시 리버스 프록시에서 인증을
-  강제하세요. 공개 인터넷에 노출 금지.
+- **로컬 로그인(외부 IdP 없음)**: 모든 페이지·API(파일·명단·상태 포함)는 미들웨어에서 세션 쿠키
+  (HMAC 서명, httpOnly, 7일)를 검사합니다. 계정은 `users` 테이블에 scrypt 해시로 저장 —
+  `npx tsx scripts/create-user.ts <아이디> <비밀번호>` 로 생성/변경. `AUTH_SECRET`은 `.env`에 자동
+  생성되며 **git에 절대 커밋되지 않습니다**. 단, 단일 공용 계정·시도 횟수 제한 없음 수준이므로
+  **내부망 배포 원칙은 유지**하고, 외부 공개 시 리버스 프록시 인증(Cloudflare Access 등)을 추가하세요.
 - 업로드/압축해제는 **zip-slip 차단 + 크기·개수 상한**(`MAX_UPLOAD_BYTES`, `MAX_ZIP_ENTRIES`,
   `MAX_ZIP_TOTAL_BYTES`)으로 zip-bomb/경로탈출을 방어합니다. 파일 서빙은 DB에 기록된 경로만 사용합니다.
 - 원본·크롭·DB(개인 인장 포함)는 `./data/` 로컬에만 저장하며 git에 커밋되지 않습니다(`.gitignore`).
