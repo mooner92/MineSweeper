@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Footer } from '@/components/Footer';
+import { NavLinks } from '@/components/NavLinks';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -18,17 +19,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <Link href="/" className="text-lg font-bold text-fg no-underline">
               ⛏️ Minesweeper
             </Link>
-            <nav className="flex items-center gap-1 text-sm">
-              <Link href="/" className="seed-btn-ghost no-underline">
-                지원자
-              </Link>
-              <Link href="/review-queue" className="seed-btn-ghost no-underline">
-                검토 필요 큐
-              </Link>
-              <Link href="/guide" className="seed-btn-ghost no-underline">
-                사용 안내
-              </Link>
-            </nav>
+            <NavLinks />
           </div>
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8">{children}</main>
