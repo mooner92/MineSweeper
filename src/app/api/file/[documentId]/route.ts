@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { getDb } from '@/db/client';
 import { documents } from '@/db/schema';
+import { readableName } from '@/lib/data';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,8 +33,24 @@ export async function GET(_req: Request, { params }: { params: { documentId: str
   const buf = await readFile(doc.filepath).catch(() => null);
   if (!buf) return new NextResponse('file missing', { status: 404 });
 
-  const type = MIME[extname(doc.filepath).toLowerCase()] ?? 'application/octet-stream';
+  const ext = extname(doc.filepath).toLowerCase(); // '.hwp', '.pdf', ...
+  const type = MIME[ext] ?? 'application/octet-stream';
+  // PDFs/images open inline (so the page anchor works); everything else (hwp/hwpx/…) downloads.
+  const inline = type.startsWith('image/') || type === 'application/pdf' || type.startsWith('text/');
+
+  // Download filename MUST carry the extension so the OS opens it (e.g. .hwp → 한글). Use the
+  // readable original name when possible; otherwise a clean synthetic. Encode for non-ASCII names.
+  const downloadName = readableName(doc.filename) ?? `document-${doc.id.slice(0, 8)}${ext}`;
+  const ascii = downloadName.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_') || `document${ext}`;
+  const disposition =
+    `${inline ? 'inline' : 'attachment'}; filename="${ascii}"; ` +
+    `filename*=UTF-8''${encodeURIComponent(downloadName)}`;
+
   return new NextResponse(new Uint8Array(buf), {
-    headers: { 'content-type': type, 'cache-control': 'private, max-age=60' },
+    headers: {
+      'content-type': type,
+      'content-disposition': disposition,
+      'cache-control': 'private, max-age=60',
+    },
   });
 }
