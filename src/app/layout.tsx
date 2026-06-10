@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { Footer } from '@/components/Footer';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -24,13 +25,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <Link href="/review-queue" className="seed-btn-ghost no-underline">
                 검토 필요 큐
               </Link>
+              <Link href="/guide" className="seed-btn-ghost no-underline">
+                사용 안내
+              </Link>
             </nav>
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
-        <footer className="mx-auto max-w-6xl px-5 pb-10 pt-4 text-center text-xs text-fg-subtle">
-          자동 추출은 초안입니다 · 최종 판단은 사람이 합니다
-        </footer>
+        <Footer />
       </body>
     </html>
   );
