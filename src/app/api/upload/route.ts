@@ -1,5 +1,6 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { getDb } from '@/db/client';
 import { applicants, documents, type NewDocument } from '@/db/schema';
@@ -53,11 +54,35 @@ export async function POST(req: Request) {
       { status: 422 },
     );
   }
-  const applicantName =
-    (applicantFolder ? parseApplicantFolder(applicantFolder).applicantName : null) ??
-    file.name.replace(/\.zip$/i, '');
+  // Identify the applicant from the folder name first, then the zip filename — both carry the
+  // 지원번호 ("2401-000050 (김철수)" or "2401-000050(김철수).zip").
+  const parsed = parseApplicantFolder(
+    applicantFolder ?? file.name.replace(/\.zip$/i, ''),
+  );
+  // Only treat it as a 지원번호 when the "id (name)" pattern actually matched (applicantName present);
+  // a bare "오지은" is a name, not an id, and must NOT dedup against other bare names.
+  const externalId = parsed.applicantName ? parsed.applicantId?.trim() || null : null;
+  const applicantName = parsed.applicantName ?? file.name.replace(/\.zip$/i, '');
+  const recruitmentRound = externalId?.includes('-') ? externalId.split('-')[0] : null;
 
-  await db.insert(applicants).values({ id: applicantId, name: applicantName });
+  // Re-upload of the same 지원번호 REPLACES the prior applicant (user-chosen "덮어쓰기" policy):
+  // drop the old applicant row — FK cascade clears its documents/persons/aggregates/flags — and
+  // remove its files on disk. Zips without a parseable 지원번호 always create a new record
+  // (a bare name like "김철수" is unsafe to dedup on — 동명이인).
+  if (externalId) {
+    const priors = await db
+      .select({ id: applicants.id })
+      .from(applicants)
+      .where(eq(applicants.externalId, externalId));
+    for (const prior of priors) {
+      await db.delete(applicants).where(eq(applicants.id, prior.id));
+      rmSync(join(UPLOAD_DIR, prior.id), { recursive: true, force: true });
+    }
+  }
+
+  await db
+    .insert(applicants)
+    .values({ id: applicantId, name: applicantName, externalId, recruitmentRound });
 
   const docRows: NewDocument[] = files.flatMap((f) => {
     const fmt = detectFormat(f.filepath);

@@ -1,5 +1,5 @@
 import type { NameCandidate, Role, SourceRef } from '@/lib/domain';
-import { fuzzyMatchWithin, nameCompleteness, namesMatch, normalizeName } from '@/lib/names';
+import { koreanNearDuplicates, nameCompleteness, namesMatch, normalizeName } from '@/lib/names';
 import { computeNeedsHuman } from '@/lib/review-policy';
 import type { AggregatedPerson, PersonWithSource } from '@/lib/pipeline/types';
 
@@ -91,23 +91,19 @@ export function aggregate(
 
   return groups.map((g, idx) => {
     const canonicalName = canonicals[idx];
-    // Gazetteer = the applicant's other canonical names; flag near-duplicates for review.
-    // Restricted to Hangul names: near-duplicate (edit-distance ≤1) is an OCR-misread signal for
-    // Korean (이주영 vs 이조영). Latin initials (C Lee vs J Lee) are distinct people, not misreads,
-    // so fuzzy-matching them would wrongly flag everyone as ambiguous.
-    const near = /[가-힣]/.test(canonicalName)
-      ? fuzzyMatchWithin(
-          canonicalName,
-          canonicals.filter((_, i) => i !== idx),
-          1,
-        ).filter((n) => n.name[0] === canonicalName[0]) // same surname only — 김종성 vs 류종성 are
-      : // different people (different 성씨), not an OCR misread; 이주영 vs 이조영 (same 이) is.
-        [];
+    // Flag the applicant's other canonical names that are near-duplicates of this one. Matching is
+    // 자모(jamo)-level for Korean so 이주영/이조영 (1 자모 = OCR misread) flag but 박철수/박철민
+    // (3 자모 = different people) do not; whole-음절 prefixes (정민/정민호) flag as 약어. Latin
+    // initials (C Lee vs J Lee) are distinct people, never misreads, so they yield no candidates.
+    const near = koreanNearDuplicates(
+      canonicalName,
+      canonicals.filter((_, i) => i !== idx),
+    );
     const ambiguous = near.length > 0;
     const nameCandidates: NameCandidate[] = ambiguous
       ? [
           { name: canonicalName, score: 1 },
-          ...near.map((n) => ({ name: n.name, score: Math.max(0, 1 - n.distance * 0.15) })),
+          ...near.map((n) => ({ name: n.name, score: n.kind === 'abbrev' ? 0.7 : 0.85 })),
         ]
       : [];
 

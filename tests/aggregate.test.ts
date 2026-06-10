@@ -76,6 +76,23 @@ describe('aggregate', () => {
     expect(result.every((r) => r.needsHuman)).toBe(true);
   });
 
+  it('does NOT flag clearly different given names (박철수 vs 박철민) — 3 자모 apart', () => {
+    // Regression: syllable-level distance scored these 1 and wrongly flagged them as 동명이인.
+    const result = aggregate([person({ nameRaw: '박철수' }), person({ nameRaw: '박철민' })]);
+    expect(result).toHaveLength(2);
+    for (const r of result) {
+      expect(r.nameCandidates).toEqual([]);
+      expect(r.needsHuman).toBe(false);
+    }
+  });
+
+  it('still flags a whole-syllable abbreviation (정민 vs 정민호) for review', () => {
+    const result = aggregate([person({ nameRaw: '정민' }), person({ nameRaw: '정민호' })]);
+    expect(result).toHaveLength(2);
+    expect(result.every((r) => r.nameCandidates.length > 1)).toBe(true);
+    expect(result.every((r) => r.needsHuman)).toBe(true);
+  });
+
   it('does NOT flag Korean names with different surnames as candidates', () => {
     // 김종성 vs 류종성: edit-distance 1 but different 성씨 → different people, not an OCR misread.
     const result = aggregate([person({ nameRaw: '김종성' }), person({ nameRaw: '류종성' })]);
