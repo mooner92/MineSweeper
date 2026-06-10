@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ko">
-      <body>
+      <body className="flex min-h-screen flex-col">
         <header className="sticky top-0 z-10 border-b border-stroke bg-bg">
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5">
             <Link href="/" className="text-lg font-bold text-fg no-underline">
@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </nav>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8">{children}</main>
         <Footer />
       </body>
     </html>
