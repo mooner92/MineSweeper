@@ -22,7 +22,7 @@ const MIME: Record<string, string> = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
-export async function GET(_req: Request, { params }: { params: { documentId: string } }) {
+export async function GET(req: Request, { params }: { params: { documentId: string } }) {
   const db = getDb();
   const doc = (
     await db.select().from(documents).where(eq(documents.id, params.documentId)).limit(1)
@@ -36,7 +36,11 @@ export async function GET(_req: Request, { params }: { params: { documentId: str
   const ext = extname(doc.filepath).toLowerCase(); // '.hwp', '.pdf', ...
   const type = MIME[ext] ?? 'application/octet-stream';
   // PDFs/images open inline (so the page anchor works); everything else (hwp/hwpx/…) downloads.
-  const inline = type.startsWith('image/') || type === 'application/pdf' || type.startsWith('text/');
+  // ?download=1 forces attachment regardless (뷰어 패널의 다운로드 버튼).
+  const forceDownload = new URL(req.url).searchParams.get('download') === '1';
+  const inline =
+    !forceDownload &&
+    (type.startsWith('image/') || type === 'application/pdf' || type.startsWith('text/'));
 
   // Download filename MUST carry the extension so the OS opens it (e.g. .hwp → 한글). Use the
   // readable original name when possible; otherwise a clean synthetic. Encode for non-ASCII names.

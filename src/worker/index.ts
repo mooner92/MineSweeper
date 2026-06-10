@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { getDb, type DB } from '@/db/client';
 import type { Extractor } from '@/lib/pipeline/types';
-import { claimNextJob, completeJob, failJob } from './queue';
+import { claimNextJob, completeJob, failJob, recoverOrphanedJobs } from './queue';
 import { processApplicant } from './process';
 
 /** Process at most one queued job. Returns the job id processed, or null if the queue is empty. */
@@ -27,6 +27,12 @@ async function main(): Promise<void> {
   const mode = process.env.EXTRACTOR_MODE ?? 'stub';
   // eslint-disable-next-line no-console
   console.log(`[worker] polling every ${interval}ms (extractor=${mode})`);
+  // 이전 워커가 죽으며 남긴 'running' 고아 작업을 다시 큐에 — 재시작 후 영구 멈춤 방지.
+  const recovered = await recoverOrphanedJobs(db);
+  if (recovered > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[worker] re-queued ${recovered} orphaned running job(s)`);
+  }
   for (;;) {
     const id = await runWorkerTick(db);
     if (id) {

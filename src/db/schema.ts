@@ -21,6 +21,14 @@ const createdAt = () =>
     .notNull()
     .$defaultFn(() => new Date());
 
+/** Local login account (Phase-1 auth — no external IdP). Password = scrypt hash, "salt:hex". */
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey().$defaultFn(uuid),
+  username: text('username').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: createdAt(),
+});
+
 /** One applicant (지원자). `name` is used to detect/exclude the applicant themself. */
 export const applicants = sqliteTable('applicants', {
   id: text('id').primaryKey().$defaultFn(uuid),
@@ -173,6 +181,7 @@ export const personAggregatesRelations = relations(personAggregates, ({ one }) =
   }),
 }));
 
+export type User = typeof users.$inferSelect;
 export type Applicant = typeof applicants.$inferSelect;
 export type NewApplicant = typeof applicants.$inferInsert;
 export type Document = typeof documents.$inferSelect;
