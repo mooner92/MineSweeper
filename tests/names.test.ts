@@ -53,7 +53,7 @@ describe('namesMatch (confident merges only)', () => {
     expect(namesMatch('John Carter', 'J. Carter')).toBe(true);
   });
   it('does NOT merge same surname but different first initial', () => {
-    expect(namesMatch('G Hong', 'G Hong')).toBe(false);
+    expect(namesMatch('S Hong', 'G Hong')).toBe(false);
   });
   it('does NOT merge across scripts', () => {
     expect(namesMatch('이준호', 'Junho Lee')).toBe(false);
