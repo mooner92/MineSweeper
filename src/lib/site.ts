@@ -11,6 +11,8 @@ export const SITE = {
   operator: 'KEI AIDT',
   /** 문의 이메일 — KEI 메일 별칭(support.aidt@kei.re.kr → mhchoi@kei.re.kr 사서함 수신). */
   contactEmail: 'support.aidt@kei.re.kr',
+  /** 소스 저장소. */
+  repoUrl: 'https://github.com/mooner92/MineSweeper',
   /** 저작권 연도 표기. */
   copyrightYears: '2026',
   /** 안내 문서(사용 안내/FAQ/소개) 마지막 수정일(YYYY.MM.DD). */
