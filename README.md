@@ -44,6 +44,7 @@
 
 - **형식 확장** = 1단 어댑터 1개 추가 (현재: pdf / image / hwp·hwpx(텍스트 추출) / text)
 - **문서유형 확장** = 3단 프롬프트 1개 추가 (현재: 학위논문 / 대표연구실적 / 학술논문 / 연구과제 / hindex)
+- **동명이인/약어 판정** = 4단에서 같은 성씨 + **자모(字母) 1자 차이(오인식)** 또는 **통째 음절 접두(약어)** 만 후보로 묶어 사람이 확인(자동병합 금지). `이주영↔이조영`·`정민↔정민호`는 묶고, `박철수↔박철민`(자모 3자 차이)은 안 묶음.
 
 ## Stage 3 추출기 — 교체 가능(pluggable)
 
@@ -67,9 +68,12 @@
 
 > ✅ **현재 라이브 상태** (실합격자 ZIP로 end-to-end 검증)
 > - **모델**: GPU1에 `Qwen2.5-VL-7B-Instruct`(vLLM, `:8010`), 추출기 `vlm`. **systemd로 상시 가동·재부팅 유지** ([`deploy/vllm-ocr-8010.service`](./deploy/vllm-ocr-8010.service)).
-> - **실검증**: 실제 합격자 ZIP(문서 13건, PDF+HWP+이미지)에서 **관계인 44명**(공저자·지도교수·연구진) 추출 + 도장/서명 감지 동작.
+> - **실검증**: 실제 합격자 ZIP(문서 13건, PDF+HWP+이미지)에서 **관계인 50여 명**(공저자·지도교수·심사위원·연구진) 추출 + **본인 자동제외** + 도장/서명 감지 동작.
 > - **HWP/HWPX**: 순수 Node(`cfb`+`zlib`/`adm-zip`)로 텍스트 추출 — 연구보고서 연구진 명단까지 추출(외부변환·sudo 불필요).
 > - **한글 ZIP 견고성**: CP949 파일명 깨짐·macOS 자모분리(NFD)·초장문 파일명·다양한 내부 폴더구조 모두 처리.
+> - **지원자 중복 제거**: 같은 **지원번호**(`2401-000050`)의 zip을 다시 올리면 **덮어쓰기**(이전 추출 교체) — 항상 1지원자 = 1카드.
+> - **검토 화면 분류**: 관계자 목록을 **관계 유형(지도교수·심사위원·공저자·연구진…)별 그룹 + 검토필요 필터 칩 + 문서별 인원 태그**로 정리.
+> - **GPU 모니터링**: 어느 GPU에 어떤 모델이 떠 있는지 Prometheus 익스포터 + Grafana 대시보드로 가시화([`deploy/`](./deploy)).
 > - **회복탄력성**: 한 문서 추출 실패(예: VLM 일시중단)가 전체 작업을 멈추지 않고 해당 문서만 검토 플래그로 강등.
 >
 > 동시 3모델 앙상블은 VRAM 부담이라 단일 경량 모델 운용. 정확도/임계값 검증 절차: [docs/validation-real-samples.md](./docs/validation-real-samples.md). 현황: [docs/progress.md](./docs/progress.md).
@@ -107,9 +111,19 @@ npm run dev:all               # 웹(:3000) + 워커 동시 기동
 | `npm run db:migrate` | 마이그레이션 적용 |
 | `npm run build` / `npm start` | 프로덕션 빌드 / 기동 |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | vitest (파이프라인 전 구간) |
+| `npm test` | vitest — 파이프라인 전 구간 (**102 테스트**) |
+| `npm run eval` | 추출 결과 검토량 baseline 측정 (`scripts/eval.ts`) |
+| `npm run detect:smoke` | 도장/서명 감지 스모크 (`scripts/detect-smoke.ts`) |
 
 > 개발은 `dev:all`(웹 `:3000` + 워커), 프로덕션은 아래 PM2로 운영합니다.
+
+### 운영 유지보수 스크립트 (`scripts/`, `npx tsx`로 실행)
+
+| 스크립트 | 설명 |
+|---|---|
+| `dedupe-applicants.ts` | 기존 데이터의 지원자 중복 1회 정리 — 지원번호 백필 + 표시명 정리 + 중복(최신 유지) 제거 |
+| `reaggregate-applicant.ts <지원번호\|id\|all>` | 저장된 추출결과로 **4단 집계만** 재실행(VLM 재추출 없이). 집계 로직·지원자명 변경 후 명단·동명이인 플래그 갱신 |
+| `serve-ocr.sh` · `download-ocr-models.sh` | 로컬 vLLM(OCR) 기동 / 모델 다운로드 |
 
 ## 프로덕션 배포 (PM2 + Cloudflare Tunnel)
 
@@ -133,6 +147,21 @@ pm2 save                         # 프로세스 목록 저장(재시작 복구)
 
 - 기본 포트 **3100** (`PORT` / `MINESWEEPER_PORT`). 로컬 확인: `http://localhost:3100`
 - 추출기 전환: `ecosystem.config.cjs`의 `EXTRACTOR_MODE`(`stub`/`hybrid`/`vlm`/`ensemble`, 현재 `vlm`) 변경 후 `pm2 restart ecosystem.config.cjs --update-env`
+
+### GPU 모니터링 (Prometheus + Grafana)
+
+공유 서버에서 **어느 GPU에 어떤 모델이 떠 있는지**(VRAM 사용/총량 포함)를 가시화합니다. `nvidia-smi` + `/proc`로
+GPU→모델을 매핑하는 Python 익스포터와 Grafana 대시보드가 [`deploy/`](./deploy)에 있습니다.
+
+```bash
+# 익스포터 기동(:9836) — 표준 라이브러리만 사용, 의존성 없음
+python3 deploy/gpu-model-exporter.py &
+# Prometheus 스크레이프 등록 + 방화벽 허용(루트 1회 실행)
+sudo bash deploy/wire-gpu-exporter.sh
+# Grafana에서 deploy/grafana-gpu-models-dashboard.json import
+```
+
+`gpu_model_vram_bytes{gpu,model,framework,port,pid}` 등으로 모델별 점유를 노출합니다. 자세히는 [docs/deployment.md](./docs/deployment.md).
 
 ### Cloudflare Tunnel
 
@@ -163,16 +192,17 @@ ingress:
 ## 검토 UI
 
 1. **업로드** — zip 업로드 → 추출 시작, 진행률 폴링.
-2. **지원자별 검토** — 역할/문서별 그룹, 출처(문서·페이지) 표시, **인쇄·고신뢰 = 초록 "자동 통과"** /
-   **비인쇄·저신뢰 = 노랑 "미확인"**, 확인/수정/제외, **본인 자동 제외**. 교정 내역은 `corrections` 에 적재.
+2. **지원자별 검토** — **관계 유형별 그룹 + 필터 칩(전체·검토필요·역할별) + 문서별 인원 태그**, 출처(문서·페이지) 링크,
+   **인쇄·고신뢰 = 초록 "자동 통과"** / **비인쇄·저신뢰 = 노랑 "미확인"**, **동명이인/약어 후보 병기**, 확인/수정/제외,
+   **본인 자동 제외**. 교정 내역은 `corrections` 에 적재.
 3. **검토 필요 큐** — 도장·손글씨·비전판독 필요 항목을 크롭 갤러리로 모아보기.
 4. **명단 내보내기** — 지원자별 최종 명단을 **CSV / Excel** 로(심사위원 풀 대조용). 본인·제외 항목은 빠집니다.
 
 ## 데이터 모델 (요약)
 
 `applicants` 1 : N `documents` 1 : M `extracted_persons` → `person_aggregates`(사람 단위 통합).
-배치 큐 `jobs`, 검토 큐 `review_flags`, 교정 로그 `corrections`. 자세한 컬럼은
-`src/db/schema.ts` 참고.
+지원자는 **`external_id`(지원번호)** 로 중복을 식별해 재업로드 시 교체합니다. 배치 큐 `jobs`, 검토 큐
+`review_flags`, 교정 로그 `corrections`. 자세한 컬럼은 `src/db/schema.ts` 참고.
 
 ## 디자인
 
