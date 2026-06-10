@@ -9,8 +9,8 @@ export const SITE = {
   tagline: '채용 이해충돌 관계자 검토 시스템',
   /** 운영 주체 — 저작권·사이트 소개에 표기됩니다. */
   operator: 'KEI AIDT',
-  /** 문의 이메일. TODO: support.aidt@kei.re.kr 별칭/공용 사서함이 만들어지면 이 한 줄만 교체. */
-  contactEmail: 'mhchoi@kei.re.kr',
+  /** 문의 이메일 — KEI 메일 별칭(support.aidt@kei.re.kr → mhchoi@kei.re.kr 사서함 수신). */
+  contactEmail: 'support.aidt@kei.re.kr',
   /** 저작권 연도 표기. */
   copyrightYears: '2026',
   /** 안내 문서(사용 안내/FAQ/소개) 마지막 수정일(YYYY.MM.DD). */
