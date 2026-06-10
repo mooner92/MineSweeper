@@ -186,15 +186,8 @@ export function initialsForm(name: string): string | null {
   return null;
 }
 
-/**
- * Levenshtein edit distance between two names (compared on their normalized forms).
- * Note: this is intentionally SEPARATE from `namesMatch` — `namesMatch` stays strict
- * (confident-only). Fuzzy distance is used to surface near-duplicate candidates to a human,
- * never to auto-merge. editDistance('이주영','이조영') === 1.
- */
-export function editDistance(a: string, b: string): number {
-  const s1 = normalizeName(a).replace(/\s+/g, '');
-  const s2 = normalizeName(b).replace(/\s+/g, '');
+/** Levenshtein edit distance over raw code units. Private — callers choose what to feed it. */
+function levenshtein(s1: string, s2: string): number {
   const m = s1.length;
   const n = s2.length;
   if (m === 0) return n;
@@ -212,31 +205,60 @@ export function editDistance(a: string, b: string): number {
   return dp[m];
 }
 
+const HANGUL_ONLY = /^[가-힣]+$/;
+
 /**
- * Among `candidates`, find names within [1, maxDist] edit distance of `name` and of the SAME
- * script (no cross-script fuzzy). Excludes the name itself and exact duplicates (distance 0).
- * Used to build human-disambiguation candidates for likely misreads/near-duplicates.
+ * Jamo-level (자모) edit distance for Korean names: NFD-decompose each 음절 into its 초성·중성·종성,
+ * then Levenshtein over the jamo sequence. This counts how many *letters* differ, not how many
+ * *syllables* — the key fix for near-duplicate detection. A single misread vowel costs 1; two
+ * unrelated syllables cost ~3:
+ *   jamoEditDistance('이주영', '이조영') === 1   (ㅜ↔ㅗ — a plausible OCR/손글씨 misread)
+ *   jamoEditDistance('김진영', '김진석') === 3   (영 vs 석 share no 자모 — clearly different people)
+ * (Syllable-level distance wrongly scored both as 1, flagging 김진영/김진석 as near-duplicates.)
  */
-export function fuzzyMatchWithin(
+export function jamoEditDistance(a: string, b: string): number {
+  return levenshtein(
+    normalizeName(a).replace(/\s+/g, '').normalize('NFD'),
+    normalizeName(b).replace(/\s+/g, '').normalize('NFD'),
+  );
+}
+
+export type NearDupKind = 'misread' | 'abbrev';
+
+/**
+ * Surface Korean near-duplicate names for a *human* to disambiguate (the 동명이인/약어 review flag).
+ * Never used to auto-merge. Two distinct shapes are caught, both requiring the same 성(첫 음절):
+ *  - misread (오인식): identical 음절 length, exactly 1 자모 apart — e.g. 이주영 vs 이조영. The classic
+ *    OCR/손글씨 confusion. 김진영 vs 김진석 is NOT caught (3 자모 apart): obviously different people.
+ *  - abbrev (약어): one name is a whole-음절 *prefix* of the other — e.g. 김용 vs 김용표.
+ * Different 성, a ≥2 음절 length gap, or any non-Hangul name yields nothing (treated as distinct).
+ */
+export function koreanNearDuplicates(
   name: string,
   candidates: string[],
-  maxDist = 1,
-): Array<{ name: string; distance: number }> {
-  const base = normalizeName(name);
-  const baseScript = detectScript(base);
+): Array<{ name: string; distance: number; kind: NearDupKind }> {
+  const a = normalizeName(name).replace(/\s+/g, '');
+  if (!HANGUL_ONLY.test(a)) return [];
   const seen = new Set<string>();
-  const out: Array<{ name: string; distance: number }> = [];
+  const out: Array<{ name: string; distance: number; kind: NearDupKind }> = [];
   for (const c of candidates) {
-    const cn = normalizeName(c);
-    if (cn === base || seen.has(cn)) continue;
-    if (detectScript(cn) !== baseScript) continue;
-    const d = editDistance(base, cn);
-    if (d >= 1 && d <= maxDist) {
-      out.push({ name: cn, distance: d });
-      seen.add(cn);
+    const b = normalizeName(c).replace(/\s+/g, '');
+    if (b === a || seen.has(b) || !HANGUL_ONLY.test(b)) continue;
+    if (a[0] !== b[0]) continue; // same 성씨 only — different surname = different person, not a misread
+    if (a.length === b.length) {
+      if (jamoEditDistance(a, b) === 1) {
+        out.push({ name: b, distance: 1, kind: 'misread' });
+        seen.add(b);
+      }
+    } else if (Math.abs(a.length - b.length) === 1) {
+      const [short, long] = a.length < b.length ? [a, b] : [b, a];
+      if (short.length >= 2 && long.startsWith(short)) {
+        out.push({ name: b, distance: 1, kind: 'abbrev' });
+        seen.add(b);
+      }
     }
   }
-  return out.sort((a, b) => a.distance - b.distance);
+  return out;
 }
 
 /** How complete a name is (3 = full, 2 = surname+initial, 1 = ambiguous). Used to pick a canonical. */
