@@ -25,6 +25,9 @@ const createdAt = () =>
 export const applicants = sqliteTable('applicants', {
   id: text('id').primaryKey().$defaultFn(uuid),
   name: text('name').notNull(),
+  // 지원번호 (e.g. "0323-000050") parsed from the zip/folder — the stable dedup key. A re-upload with
+  // the same external_id REPLACES the prior applicant (see api/upload). Null when not parseable.
+  externalId: text('external_id'),
   recruitmentRound: text('recruitment_round'),
   createdAt: createdAt(),
 });
