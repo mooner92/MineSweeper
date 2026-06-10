@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { applicants, documents, jobs, personAggregates, reviewFlags } from '@/db/schema';
 import type { Extractor } from '@/lib/pipeline/types';
 import { runWorkerTick } from '@/worker';
-import { enqueueApplicant } from '@/worker/queue';
+import { enqueueApplicant, recoverOrphanedJobs } from '@/worker/queue';
 import { ARTICLE_EN, THESIS_KO } from './fixtures';
 import { freshDb } from './helpers/db';
 
@@ -106,5 +106,35 @@ describe('worker', () => {
       .from(reviewFlags)
       .where(eq(reviewFlags.applicantId, applicantId));
     expect(flags.some((f) => f.flagType === 'handwriting')).toBe(true);
+  });
+
+  it('re-queues jobs orphaned by a worker crash/restart (stuck in running)', async () => {
+    const db = await freshDb();
+    const dir = mkdtempSync(join(tmpdir(), 'ms-worker-orphan-'));
+    const docPath = join(dir, '2401-000001_[학위논문]_thesis.txt');
+    writeFileSync(docPath, THESIS_KO);
+
+    const applicantId = 'app-3';
+    await db.insert(applicants).values({ id: applicantId, name: '홍길동' });
+    await db.insert(documents).values({
+      applicantId,
+      folderCategory: '논문첨부',
+      sourceFormat: 'text',
+      filename: '2401-000001_[학위논문]_thesis.txt',
+      filepath: docPath,
+    });
+
+    // Simulate a worker that claimed the job and then died: row stuck in 'running'.
+    const jobId = await enqueueApplicant(db, applicantId);
+    await db.update(jobs).set({ status: 'running' }).where(eq(jobs.id, jobId));
+
+    // Without recovery the tick finds nothing (claimNextJob only picks 'queued').
+    expect(await runWorkerTick(db)).toBeNull();
+
+    // Startup recovery re-queues it; the next tick processes it to completion.
+    expect(await recoverOrphanedJobs(db)).toBe(1);
+    expect(await runWorkerTick(db)).toBe(jobId);
+    const job = (await db.select().from(jobs).where(eq(jobs.id, jobId)))[0];
+    expect(job?.status).toBe('done');
   });
 });

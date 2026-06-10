@@ -15,6 +15,20 @@ export async function enqueueApplicant(db: DB, applicantId: string): Promise<str
   return id;
 }
 
+/**
+ * Re-queue jobs orphaned by a worker crash/restart. Single-worker model: any row still
+ * 'running' at boot belongs to a dead process (claimNextJob never re-picks 'running'),
+ * so without this the job — and the applicant's "추출 running" header — hangs forever.
+ */
+export async function recoverOrphanedJobs(db: DB): Promise<number> {
+  const rows = await db
+    .update(jobs)
+    .set({ status: 'queued', updatedAt: new Date() })
+    .where(eq(jobs.status, 'running'))
+    .returning({ id: jobs.id });
+  return rows.length;
+}
+
 /** Atomically-ish claim the oldest queued job (single-worker model) and mark it running. */
 export async function claimNextJob(db: DB): Promise<Job | null> {
   const rows = await db

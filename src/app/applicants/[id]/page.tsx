@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ConfidenceBadge, FinalStatusBadge, RoleBadges } from '@/components/badges';
+import { DocumentList } from '@/components/DocumentList';
 import { GroupToggle } from '@/components/GroupToggle';
 import { PersonActions } from '@/components/PersonActions';
 import { DOC_TYPE_LABELS_KO, ROLE_LABELS_KO, ROLES, type Role } from '@/lib/domain';
@@ -235,26 +236,19 @@ export default async function ApplicantPage({
       )}
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-fg-muted">문서 ({documents.length}건)</h2>
-        <ul className="grid gap-2 sm:grid-cols-2">
-          {documents.map((d) => (
-            <li key={d.id} className="seed-card flex items-center justify-between gap-3 p-3 text-sm">
-              <span className="truncate" title={d.filename}>
-                {d.filename}
-              </span>
-              <span className="flex shrink-0 items-center gap-1.5">
-                <span
-                  className={`text-xs ${
-                    (docPeople.get(d.id) ?? 0) > 0 ? 'font-semibold text-fg' : 'text-fg-subtle'
-                  }`}
-                >
-                  관계자 {docPeople.get(d.id) ?? 0}명
-                </span>
-                <span className="seed-badge-neutral">{DOC_TYPE_LABELS_KO[d.docType]}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
+        <h2 className="mb-2 text-sm font-semibold text-fg-muted">
+          문서 ({documents.length}건) <span className="font-normal text-fg-subtle">— 클릭하면 원문 미리보기</span>
+        </h2>
+        <DocumentList
+          items={documents.map((d) => ({
+            id: d.id,
+            filename: d.filename,
+            label: DOC_TYPE_LABELS_KO[d.docType],
+            format: d.sourceFormat,
+            people: docPeople.get(d.id) ?? 0,
+            pageCount: d.pageCount,
+          }))}
+        />
       </section>
     </div>
   );
