@@ -34,8 +34,9 @@ export const applicants = sqliteTable('applicants', {
   id: text('id').primaryKey().$defaultFn(uuid),
   name: text('name').notNull(),
   // 지원번호 (e.g. "2401-000050") parsed from the zip/folder — the stable dedup key. A re-upload with
-  // the same external_id REPLACES the prior applicant (see api/upload). Null when not parseable.
-  externalId: text('external_id'),
+  // the same external_id REPLACES the prior applicant (see api/upload). Null when not parseable
+  // (multiple NULLs are allowed by the unique index; the constraint backstops concurrent uploads).
+  externalId: text('external_id').unique(),
   recruitmentRound: text('recruitment_round'),
   createdAt: createdAt(),
 });

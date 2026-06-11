@@ -39,8 +39,12 @@ export async function GET(_req: Request, { params }: { params: { documentId: str
       note: result.note ?? null,
     });
   } catch (err) {
+    // Full detail stays in the server log; the client gets a generic message + correlation id
+    // (parser errors can leak filesystem paths / library internals).
+    const errorId = crypto.randomUUID().slice(0, 8);
+    console.error(`[doc-text ${errorId}]`, err);
     return NextResponse.json(
-      { error: `텍스트 추출 실패: ${err instanceof Error ? err.message : String(err)}` },
+      { error: `텍스트 추출에 실패했습니다 (오류 ID: ${errorId}) — 원문은 다운로드로 확인하세요.` },
       { status: 500 },
     );
   }

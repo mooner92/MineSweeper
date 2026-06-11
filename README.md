@@ -124,6 +124,7 @@ npm run dev:all               # 웹(:3000) + 워커 동시 기동
 | `create-user.ts <아이디> <비밀번호>` | 로그인 계정 생성/비밀번호 변경 (+ 최초 실행 시 `AUTH_SECRET`을 `.env`에 생성) |
 | `dedupe-applicants.ts` | 기존 데이터의 지원자 중복 1회 정리 — 지원번호 백필 + 표시명 정리 + 중복(최신 유지) 제거 |
 | `reaggregate-applicant.ts <지원번호\|id\|all>` | 저장된 추출결과로 **4단 집계만** 재실행(VLM 재추출 없이). 집계 로직·지원자명 변경 후 명단·동명이인 플래그 갱신 |
+| `backup-data.ts [--with-uploads]` | DB 온라인 스냅샷(`VACUUM INTO`) + 보존 개수 관리. cron 등록 권장(예: 매일 03:00) |
 | `serve-ocr.sh` · `download-ocr-models.sh` | 로컬 vLLM(OCR) 기동 / 모델 다운로드 |
 
 ## 프로덕션 배포 (PM2 + Cloudflare Tunnel)
