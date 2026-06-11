@@ -29,6 +29,13 @@
       "when": 1781085548804,
       "tag": "0003_flawless_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1781137778592,
+      "tag": "0004_glossy_klaw",
+      "breakpoints": true
     }
   ]
 }

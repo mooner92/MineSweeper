@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `applicants_external_id_unique` ON `applicants` (`external_id`);

@@ -69,20 +69,38 @@ export async function POST(req: Request) {
   // drop the old applicant row — FK cascade clears its documents/persons/aggregates/flags — and
   // remove its files on disk. Zips without a parseable 지원번호 always create a new record
   // (a bare name like "김철수" is unsafe to dedup on — 동명이인).
-  if (externalId) {
-    const priors = await db
-      .select({ id: applicants.id })
-      .from(applicants)
-      .where(eq(applicants.externalId, externalId));
-    for (const prior of priors) {
-      await db.delete(applicants).where(eq(applicants.id, prior.id));
-      rmSync(join(UPLOAD_DIR, prior.id), { recursive: true, force: true });
-    }
+  // Delete+insert run in ONE transaction (no duplicate window between check and insert); the
+  // unique index on external_id backstops truly concurrent uploads — the loser gets a 409.
+  const priorIds: string[] = [];
+  try {
+    await db.transaction(async (tx) => {
+      if (externalId) {
+        const priors = await tx
+          .select({ id: applicants.id })
+          .from(applicants)
+          .where(eq(applicants.externalId, externalId));
+        for (const prior of priors) {
+          await tx.delete(applicants).where(eq(applicants.id, prior.id));
+          priorIds.push(prior.id);
+        }
+      }
+      await tx
+        .insert(applicants)
+        .values({ id: applicantId, name: applicantName, externalId, recruitmentRound });
+    });
+  } catch (err) {
+    // UNIQUE(external_id) violation = the same 지원번호 arrived concurrently.
+    console.error('[upload] applicant insert failed', err);
+    rmSync(baseDir, { recursive: true, force: true });
+    return NextResponse.json(
+      { error: '같은 지원번호의 업로드가 동시에 처리되고 있습니다. 잠시 후 다시 시도하세요.' },
+      { status: 409 },
+    );
   }
-
-  await db
-    .insert(applicants)
-    .values({ id: applicantId, name: applicantName, externalId, recruitmentRound });
+  // Disk cleanup only after the transaction committed (a rollback must not delete prior files).
+  for (const id of priorIds) {
+    rmSync(join(UPLOAD_DIR, id), { recursive: true, force: true });
+  }
 
   const docRows: NewDocument[] = files.flatMap((f) => {
     const fmt = detectFormat(f.filepath);

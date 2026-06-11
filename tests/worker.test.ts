@@ -137,4 +137,20 @@ describe('worker', () => {
     const job = (await db.select().from(jobs).where(eq(jobs.id, jobId)))[0];
     expect(job?.status).toBe('done');
   });
+
+  it('dead-letters a job that exceeded the max attempt count', async () => {
+    const db = await freshDb();
+    const applicantId = 'app-4';
+    await db.insert(applicants).values({ id: applicantId, name: '홍길동' });
+
+    // Crash-recovery loop simulation: the job has already been claimed 3 times.
+    const jobId = await enqueueApplicant(db, applicantId);
+    await db.update(jobs).set({ attempts: 3 }).where(eq(jobs.id, jobId));
+
+    // The tick refuses to run it again and parks it as error (dead letter).
+    expect(await runWorkerTick(db)).toBeNull();
+    const job = (await db.select().from(jobs).where(eq(jobs.id, jobId)))[0];
+    expect(job?.status).toBe('error');
+    expect(job?.error).toContain('최대 시도 횟수');
+  });
 });

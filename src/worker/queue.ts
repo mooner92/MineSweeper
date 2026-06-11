@@ -29,6 +29,9 @@ export async function recoverOrphanedJobs(db: DB): Promise<number> {
   return rows.length;
 }
 
+/** A job re-queued this many times (crash→recovery loops) is broken input — stop retrying it. */
+const MAX_ATTEMPTS = Number(process.env.JOB_MAX_ATTEMPTS ?? 3);
+
 /** Atomically-ish claim the oldest queued job (single-worker model) and mark it running. */
 export async function claimNextJob(db: DB): Promise<Job | null> {
   const rows = await db
@@ -39,6 +42,13 @@ export async function claimNextJob(db: DB): Promise<Job | null> {
     .limit(1);
   const job = rows[0];
   if (!job) return null;
+
+  // Dead-letter guard: without this, a job that crashes the worker would be recovered to
+  // 'queued', claimed again, crash again — forever. Park it as error for a human to look at.
+  if (job.attempts >= MAX_ATTEMPTS) {
+    await failJob(db, job.id, `최대 시도 횟수(${MAX_ATTEMPTS}회) 초과 — 반복 실패로 중단됨`);
+    return null;
+  }
 
   const attempts = job.attempts + 1;
   await db
