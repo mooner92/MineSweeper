@@ -18,7 +18,7 @@ function GitHubMark({ className }: { className?: string }) {
 export function Footer() {
   return (
     <footer className="mt-12 border-t border-stroke bg-bg">
-      <div className="mx-auto max-w-6xl space-y-6 px-5 py-8">
+      <div className="mx-auto max-w-screen-2xl space-y-6 px-5 py-8 sm:px-6 xl:px-10 2xl:px-14">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1 text-sm">
             <p className="font-bold text-fg">⛏️ {SITE.name}</p>

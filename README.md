@@ -22,7 +22,9 @@
 | 아키텍처 / 파이프라인 | [architecture](./docs/architecture.md) · [pipeline](./docs/pipeline.md) |
 | 추출기 / 이름 매칭 | [extractors](./docs/extractors.md) · [names-and-matching](./docs/names-and-matching.md) |
 | 데이터 / 워커 | [data-model](./docs/data-model.md) · [worker](./docs/worker.md) |
-| API / UI | [api](./docs/api.md) · [ui](./docs/ui.md) |
+| API / UI | [api](./docs/api.md) · [ui](./docs/ui.md) · [document-reviewer(검토 드로어)](./docs/document-reviewer.md) |
+| 전문가 풀 / 초빙 | [expert-pool(제척·초빙)](./docs/expert-pool.md) |
+| 디자인 | [design-system(디자인 시스템·색)](./docs/design-system.md) |
 | 보안 / 개발 / 배포 | [security](./docs/security.md) · [development](./docs/development.md) · [deployment](./docs/deployment.md) |
 | 모델 평가 / 로드맵 | [model-evaluation](./docs/model-evaluation.md) · [roadmap](./docs/roadmap.md) |
 
@@ -111,7 +113,7 @@ npm run dev:all               # 웹(:3000) + 워커 동시 기동
 | `npm run db:migrate` | 마이그레이션 적용 |
 | `npm run build` / `npm start` | 프로덕션 빌드 / 기동 |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | vitest — 파이프라인·인증 전 구간 (**108 테스트**) |
+| `npm test` | vitest — 파이프라인·인증 전 구간 (**177 테스트**) |
 | `npm run eval` | 추출 결과 검토량 baseline 측정 (`scripts/eval.ts`) |
 | `npm run detect:smoke` | 도장/서명 감지 스모크 (`scripts/detect-smoke.ts`) |
 
@@ -125,6 +127,7 @@ npm run dev:all               # 웹(:3000) + 워커 동시 기동
 | `dedupe-applicants.ts` | 기존 데이터의 지원자 중복 1회 정리 — 지원번호 백필 + 표시명 정리 + 중복(최신 유지) 제거 |
 | `reaggregate-applicant.ts <지원번호\|id\|all>` | 저장된 추출결과로 **4단 집계만** 재실행(VLM 재추출 없이). 집계 로직·지원자명 변경 후 명단·동명이인 플래그 갱신 |
 | `backup-data.ts [--with-uploads]` | DB 온라인 스냅샷(`VACUUM INTO`) + 보존 개수 관리. cron 등록 권장(예: 매일 03:00) |
+| `import-experts.ts <xlsx>` | KEI 심사위원 후보 **전문가 풀** 적재(제척 대조용). 전체 교체, 재실행 가능. 명단은 PII라 DB는 커밋 금지 |
 | `serve-ocr.sh` · `download-ocr-models.sh` | 로컬 vLLM(OCR) 기동 / 모델 다운로드 |
 
 ## 프로덕션 배포 (PM2 + Cloudflare Tunnel)
@@ -198,22 +201,34 @@ ingress:
 1. **업로드** — zip 업로드 → 추출 시작, 진행률 폴링.
 2. **지원자별 검토** — **관계 유형별 그룹 + 필터 칩(전체·검토필요·역할별) + 문서별 인원 태그**, 출처(문서·페이지) 링크,
    **인쇄·고신뢰 = 초록 "자동 통과"** / **비인쇄·저신뢰 = 노랑 "미확인"**, **동명이인/약어 후보 병기**, 확인/수정/제외,
-   **본인 자동 제외**. 교정 내역은 `corrections` 에 적재.
+   **본인 자동 제외**, **자동 점검 카드**(본인 식별·검출 커버리지·스캔 문서·검토 대기·동일소속 — 이상 시 경고),
+   **동일소속 배지**(본인 소속기관과 같은 기관 추정 시), **추출실패 가시화**(텍스트 문서인데 0명 → "0명 — 확인" 배지),
+   **전문가 풀 대조**(관계자와 이름이 일치하는 심사위원 후보 = **제척 대상**. 이름 일치 기준이라 동명이인 주의 표시).
+   교정 내역은 `corrections` 에 적재.
 3. **검토 필요 큐** — 도장·손글씨·비전판독 필요 항목을 크롭 갤러리로 모아보기.
-4. **문서 슬라이드 뷰어** — 문서 카드 클릭 시 우측 패널로 원문 미리보기(PDF=내장 뷰어, 이미지=원본,
-   HWP/텍스트=추출 텍스트 읽기 전용) + 다운로드·새 탭. ESC/오버레이로 닫기.
-5. **명단 내보내기** — 지원자별 최종 명단을 **CSV / Excel** 로(심사위원 풀 대조용). 본인·제외 항목은 빠집니다.
+4. **문서 슬라이드 뷰어** — 문서 카드 클릭 시 우측 2단 패널: **좌(검출 관계자 카드)** + 우(원문). 관계자 카드/페이지
+   클릭 시 PDF가 해당 쪽으로 이동(PDF=내장 뷰어, 이미지=원본, HWP/텍스트=추출 텍스트) + 다운로드·새 탭. ESC로 닫기.
+5. **면접위원 초빙** — 전문가 풀에서 **제척·기담음을 제외한 후보**를 분야(대/중분류)·이름·소속으로 좁혀
+   골라 담고(`초빙 명단`), **Excel로 산출**. 명단은 담는 시점의 정보를 **스냅샷으로 DB에 영속**해 풀이
+   바뀌어도 불변(`invitations`, soft-delete로 이력 보존). 자세히는 [docs/expert-pool.md](./docs/expert-pool.md).
+6. **명단 내보내기** — 지원자별 최종 명단을 **CSV / Excel** 로(심사위원 풀 대조용). 본인·제외 항목은 빠지고,
+   `same_affiliation` 열로 본인과 동일 소속기관 추정 인물을, `korean_name_est` 열로 로마자 표기
+   이름의 **한글 추정**("김민수(추정)")을 표시합니다 — 중국·일본 이름 오변환을 막는 3중 게이트
+   (성씨표 + 음절 분절 + 충돌 성씨·모호 어순 차단, `src/lib/hangulize.ts`).
 
 ## 데이터 모델 (요약)
 
 `applicants` 1 : N `documents` 1 : M `extracted_persons` → `person_aggregates`(사람 단위 통합).
 지원자는 **`external_id`(지원번호)** 로 중복을 식별해 재업로드 시 교체합니다. 배치 큐 `jobs`, 검토 큐
-`review_flags`, 교정 로그 `corrections`. 자세한 컬럼은 `src/db/schema.ts` 참고.
+`review_flags`, 교정 로그 `corrections`. 심사위원 후보 풀 `experts`(제척 대조), 초빙 명단 `invitations`
+(스냅샷·soft-delete). 자세한 컬럼은 `src/db/schema.ts` 참고.
 
 ## 디자인
 
 [seed-design](https://github.com/daangn/seed-design) 원칙(시맨틱 토큰·캐럿 액센트·접근성)을 따른
-토큰을 `src/app/globals.css` + `tailwind.config.ts` 에 정의했습니다.
+토큰을 `src/app/globals.css` + `tailwind.config.ts` 에 정의했습니다. **다크/밝게/시스템 테마**를
+지원합니다 — 헤더 토글로 전환(localStorage 저장, system은 OS 설정 추종), 모든 색은 `html.dark` 에서
+재정의되는 동일 시맨틱 토큰이라 컴포넌트 코드는 손대지 않습니다(FOUC 방지 인라인 스크립트는 `layout.tsx`).
 
 ## 보안 / 배포
 

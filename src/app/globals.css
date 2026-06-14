@@ -2,28 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
-/* seed-design–inspired semantic tokens (light theme). */
+/* Pretendard 자체 호스팅(가변 폰트). 외부 CDN 없이 /public 에서 서빙 — 온프레 원칙 유지.
+   토스 실제 폰트(Toss Product Sans)는 비공개라, 한국 핀테크의 오픈(OFL) 대안 Pretendard를 쓴다. */
+@font-face {
+  font-family: 'Pretendard';
+  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* KEI 브랜드 시맨틱 토큰 (라이트). 브랜드색: 그린 #00B48D(primary), 블루 #00A4E0(info), 그레이 #80817E.
+   상세 규칙은 docs/design-system.md. 컴포넌트는 이 토큰만 참조하므로 색 변경은 여기서만 한다. */
 :root {
   --seed-bg: #ffffff;
-  --seed-bg-layer: #f4f5f6;
+  --seed-bg-layer: #f0f1f0; /* 카드 헤더 배경 — 본문 흰색과 대비 강화 */
   --seed-bg-elevated: #ffffff;
-  --seed-fg: #212124;
-  --seed-fg-muted: #55585e;
-  --seed-fg-subtle: #909298;
+  --seed-fg: #1b1c1b;
+  --seed-fg-muted: #565756;
+  --seed-fg-subtle: #6b6c6a; /* KEI 그레이 — #80817e에서 조정, 흰 배경 대비 5.2:1(AA 통과) */
   --seed-fg-oncolor: #ffffff;
-  --seed-stroke: #e8eaed;
-  --seed-stroke-strong: #d1d4d9;
-  --seed-accent: #ff6f0f;
-  --seed-accent-pressed: #e25e00;
-  --seed-accent-subtle: #fff2e8;
-  --seed-success: #1f9254;
-  --seed-success-subtle: #e7f6ee;
-  --seed-warning: #a66b00;
+  --seed-stroke: #dddedd; /* 행 구분선 강화(#e7e8e7→#dddedd) */
+  --seed-stroke-strong: #c2c4c2; /* hover 테두리 강화 */
+  --seed-accent: #00b48d; /* KEI 그린 — primary */
+  --seed-accent-pressed: #009b79;
+  --seed-accent-subtle: #e1f6f0;
+  --seed-info: #00a4e0; /* KEI 블루 — 보조/정보 */
+  --seed-info-subtle: #e2f4fc;
+  --seed-success: #0e9f6e; /* 통과/완료 — 브랜드 그린 계열 */
+  --seed-success-subtle: #e3f5ee;
+  --seed-warning: #8f5c00; /* 주의·로딩 — 앰버 (#a66b00→#8f5c00: warning-subtle 위 대비 ~5.8:1) */
   --seed-warning-subtle: #fff5e0;
-  --seed-danger: #d92d20;
+  --seed-danger: #d92d20; /* 중단·제척 — 레드 */
   --seed-danger-subtle: #fdeceb;
   --seed-font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
     'Malgun Gothic', system-ui, sans-serif;
+}
+
+/* 다크 테마 — html.dark 일 때 같은 시맨틱 토큰을 어두운 값으로 재정의(컴포넌트는 손대지 않음).
+   브랜드 그린/블루는 어두운 배경에서 또렷하도록 한 단계 밝게 보정. */
+.dark {
+  --seed-bg: #17191a;
+  --seed-bg-layer: #1f2122;
+  --seed-bg-elevated: #26292a;
+  --seed-fg: #f3f5f4;
+  --seed-fg-muted: #b0b3b1;
+  --seed-fg-subtle: #9a9b99; /* 다크 배경(#17191a) 대비 5.8:1 확보 */
+  --seed-fg-oncolor: #ffffff;
+  --seed-stroke: #333536; /* 다크 행 구분선 강화 */
+  --seed-stroke-strong: #484b4c;
+  --seed-accent: #1ec9a3; /* KEI 그린(다크 보정) */
+  --seed-accent-pressed: #00b48d;
+  --seed-accent-subtle: #10302a;
+  --seed-info: #38b6e8; /* KEI 블루(다크 보정) */
+  --seed-info-subtle: #102a36;
+  --seed-success: #3fcf7f;
+  --seed-success-subtle: #14301f;
+  --seed-warning: #e0a23c;
+  --seed-warning-subtle: #382a10;
+  --seed-danger: #f5685c;
+  --seed-danger-subtle: #3a1714;
+  color-scheme: dark;
 }
 
 @layer base {
@@ -33,6 +72,12 @@
   body {
     @apply bg-bg-layer text-fg antialiased;
     font-family: var(--seed-font-sans);
+    line-height: 1.6; /* 한국어 기본 행간 — 브라우저 기본(1.2~1.4) 대비 가독성 개선 */
+    word-break: keep-all; /* 한국어 어절 단위 줄바꿈 */
+  }
+  /* 테이블은 밀도 유지를 위해 행간을 본문보다 타이트하게 */
+  table {
+    line-height: 1.45;
   }
 }
 
@@ -59,7 +104,8 @@
     @apply hover:border-stroke-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50;
   }
   .seed-badge {
-    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold;
+    /* py-[5px]: 한글 12px에서 세로 패딩 0.5px 더 확보해 가독성 향상 */
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-[5px] text-xs font-bold leading-none;
   }
   .seed-badge-success {
     @apply seed-badge bg-success-subtle text-success;
@@ -72,6 +118,9 @@
   }
   .seed-badge-danger {
     @apply seed-badge bg-danger-subtle text-danger;
+  }
+  .seed-badge-info {
+    @apply seed-badge bg-info-subtle text-info;
   }
 }
 
@@ -97,4 +146,43 @@
 }
 .ms-overlay {
   animation: ms-fade-in 0.22s ease-out;
+}
+
+/* StatCell 진입 애니메이션 — 페이지 로드 시 fade+translate. index prop으로 딜레이 제어. */
+@keyframes ms-stat-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ms-stat {
+  animation: ms-stat-in 0.18s ease-out both;
+}
+
+/* details/summary 아코디언 아이콘 회전 duration 명시 */
+.ms-chevron {
+  transition: transform 150ms ease-out;
+}
+details[open] .ms-chevron {
+  transform: rotate(180deg);
+}
+
+/* 접근성: 모션 감소 선호 시 모든 애니메이션·전환 비활성화 */
+@media (prefers-reduced-motion: reduce) {
+  .ms-stat {
+    animation: none;
+  }
+  .ms-chevron {
+    transition: none;
+  }
+  .ms-drawer {
+    animation: none;
+  }
+  .ms-overlay {
+    animation: none;
+  }
 }

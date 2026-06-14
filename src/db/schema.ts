@@ -1,8 +1,9 @@
 import { relations } from 'drizzle-orm';
-import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type {
   Bbox,
   DocType,
+  ExpertField,
   FlagType,
   JobStatus,
   NameCandidate,
@@ -38,6 +39,9 @@ export const applicants = sqliteTable('applicants', {
   // (multiple NULLs are allowed by the unique index; the constraint backstops concurrent uploads).
   externalId: text('external_id').unique(),
   recruitmentRound: text('recruitment_round'),
+  // 섭외 후보 기본 필터로 쓰는 지원자 연구 분야(인사팀이 선택해 저장 → 재방문 시 유지). 자동 추출 아님.
+  fieldDae: text('field_dae'),
+  fieldMid: text('field_mid'),
   createdAt: createdAt(),
 });
 
@@ -153,6 +157,56 @@ export const corrections = sqliteTable('corrections', {
   createdAt: createdAt(),
 });
 
+/**
+ * KEI 심사위원 후보 전문가 풀(외부 명단). 지원자의 관계자(지도교수·심사위원·공저자 등)와 이름이
+ * 일치하면 그 전문가는 해당 지원자 심사에서 **제척** 대상이다. PII(이름·연락처)를 담으므로 DB는
+ * 절대 커밋하지 않는다(.gitignore). 적재는 scripts/import-experts.ts, 재실행 시 전체 교체.
+ */
+export const experts = sqliteTable(
+  'experts',
+  {
+    // 외부 KEI 전문가 ID(예: '82260238') — 명단의 안정적 식별자, 재적재 시 동일 키로 교체.
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    // 매칭 키(= nameKey(name)) — 관계자 이름과 대조한다. 동명이인은 같은 키로 묶인다.
+    nameKey: text('name_key').notNull(),
+    affiliation: text('affiliation'),
+    position: text('position'),
+    email: text('email'),
+    phone: text('phone'),
+    // 등록된 분류체계 경로들(한 전문가가 세부분야 여러 개). 섭외 분야필터·표시용.
+    fields: text('fields', { mode: 'json' }).$type<ExpertField[]>().notNull().default([]),
+    // 등록일자 원문 문자열(타임존 변환 회피).
+    registeredAt: text('registered_at'),
+    createdAt: createdAt(),
+  },
+  (t) => ({ nameKeyIdx: index('experts_name_key_idx').on(t.nameKey) }),
+);
+
+/**
+ * 초빙(섭외) 명단 — 지원자별로 인사팀이 풀에서 골라 담은 면접위원 후보. **변질 방지**가 핵심이라
+ * 담는 시점의 전문가 정보를 스냅샷으로 박아둔다(풀 재적재·전문가 레코드 변경에 영향받지 않음).
+ * 삭제는 soft delete(removedAt)로 변경 이력을 남긴다 — 활성 명단 = removedAt IS NULL.
+ */
+export const invitations = sqliteTable('invitations', {
+  id: text('id').primaryKey().$defaultFn(uuid),
+  applicantId: text('applicant_id')
+    .notNull()
+    .references(() => applicants.id, { onDelete: 'cascade' }),
+  // 풀 전문가 ID(대조용 참조일 뿐 FK 아님 — 풀 재적재가 명단을 건드리면 안 되므로).
+  expertId: text('expert_id').notNull(),
+  // 담은 시점의 스냅샷(이 값이 곧 산출물 — 풀이 바뀌어도 불변).
+  name: text('name').notNull(),
+  affiliation: text('affiliation'),
+  position: text('position'),
+  email: text('email'),
+  phone: text('phone'),
+  fields: text('fields', { mode: 'json' }).$type<ExpertField[]>().notNull().default([]),
+  createdAt: createdAt(),
+  // null = 활성. 값이 있으면 명단에서 빠진 것(이력 보존).
+  removedAt: integer('removed_at', { mode: 'timestamp' }),
+});
+
 // --- relations (for the convenient db.query.* API used by the review UI) ---
 
 export const applicantsRelations = relations(applicants, ({ many }) => ({
@@ -197,3 +251,7 @@ export type ReviewFlag = typeof reviewFlags.$inferSelect;
 export type NewReviewFlag = typeof reviewFlags.$inferInsert;
 export type Correction = typeof corrections.$inferSelect;
 export type NewCorrection = typeof corrections.$inferInsert;
+export type Expert = typeof experts.$inferSelect;
+export type NewExpert = typeof experts.$inferInsert;
+export type Invitation = typeof invitations.$inferSelect;
+export type NewInvitation = typeof invitations.$inferInsert;

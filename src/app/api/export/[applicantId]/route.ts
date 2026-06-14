@@ -17,6 +17,9 @@ export async function GET(req: Request, { params }: { params: { applicantId: str
     .from(personAggregates)
     .where(eq(personAggregates.applicantId, params.applicantId));
 
+  // 동일소속기관(same_affiliation) 판정 기준 — self 행을 걸러내기 전에 본인 소속을 수집한다.
+  const selfAffiliations = rows.filter((r) => r.isSelf).map((r) => r.affiliation);
+
   // Final roster excludes the applicant themself and rejected entries.
   const visible: AggregatedPerson[] = rows
     .filter((r) => !r.isSelf && r.finalStatus !== 'rejected')
@@ -32,7 +35,7 @@ export async function GET(req: Request, { params }: { params: { applicantId: str
     }));
 
   if (format === 'xlsx') {
-    const buf = await toXlsxBuffer(visible);
+    const buf = await toXlsxBuffer(visible, { selfAffiliations });
     return new NextResponse(new Uint8Array(buf), {
       headers: {
         'content-type':
@@ -42,7 +45,7 @@ export async function GET(req: Request, { params }: { params: { applicantId: str
     });
   }
 
-  const csv = toCsv(visible);
+  const csv = toCsv(visible, { selfAffiliations });
   return new NextResponse(csv, {
     headers: {
       'content-type': 'text/csv; charset=utf-8',

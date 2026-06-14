@@ -2,10 +2,26 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import type { IngestResult, PageBundle } from '@/lib/pipeline/types';
 
-// Cap pages parsed for text. Names live in the front matter (저자/연구진/인준 블록), and the
-// extractor only sends the first ~12k chars to the VLM anyway — so parsing all pages of a huge
-// report (수백~수천 쪽) is wasted CPU and the main slowness. Tunable via PDF_MAX_PAGES.
-const MAX_PAGES = Number(process.env.PDF_MAX_PAGES ?? 20);
+// Page window parsed for text. Names mostly live in the FRONT matter (저자/연구진/인준 블록), but
+// 연구보고서 양식에 따라 참여연구진 명단·감사의 글이 맨 뒤에 붙기도 한다 — so parse 앞 N + 뒤 M pages
+// and skip the middle (parsing all pages of 수백~수천 쪽 reports was wasted CPU and the main
+// slowness). Tunable via PDF_FRONT_PAGES / PDF_BACK_PAGES; legacy PDF_MAX_PAGES = front fallback.
+const envInt = (v: string | undefined, fallback: number): number => {
+  if (!v) return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : fallback; // typo'd env must not zero the window
+};
+const FRONT_PAGES = envInt(process.env.PDF_FRONT_PAGES ?? process.env.PDF_MAX_PAGES, 8);
+const BACK_PAGES = envInt(process.env.PDF_BACK_PAGES, 4);
+
+/** 1-based page numbers in the front/back window — deduped, ascending; short docs yield all pages. */
+export function windowPageNumbers(numPages: number, front = FRONT_PAGES, back = BACK_PAGES): number[] {
+  const nums = new Set<number>();
+  for (let i = 1; i <= Math.min(front, numPages); i++) nums.add(i);
+  for (let i = Math.max(1, numPages - back + 1); i <= numPages; i++) nums.add(i);
+  return [...nums].sort((a, b) => a - b);
+}
+
 /** Below this many characters on a page, we treat it as having no usable text layer. */
 const MIN_TEXT_CHARS = 12;
 
@@ -68,8 +84,7 @@ export async function ingestPdf(filepath: string): Promise<IngestResult> {
       useSystemFonts: true,
       verbosity: 0,
     }).promise;
-    const n = Math.min(doc.numPages, MAX_PAGES);
-    for (let i = 1; i <= n; i++) {
+    for (const i of windowPageNumbers(doc.numPages)) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
       const text = content.items

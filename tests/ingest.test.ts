@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { detectFormat, ingest } from '@/lib/pipeline/ingest';
+import { windowPageNumbers } from '@/lib/pipeline/ingest/pdf';
 import { MINI_PDF } from './fixtures';
 
 const tmp = mkdtempSync(join(tmpdir(), 'ms-ingest-'));
@@ -19,6 +20,26 @@ describe('detectFormat', () => {
     expect(detectFormat('a.hwpx')).toBe('hwp');
     expect(detectFormat('a.txt')).toBe('text');
     expect(detectFormat('a.zip')).toBeNull();
+  });
+});
+
+describe('windowPageNumbers (PDF 앞N+뒤M 윈도우)', () => {
+  it('parses front+back pages of long docs, keeping REAL page numbers', () => {
+    expect(windowPageNumbers(50, 8, 4)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 47, 48, 49, 50]);
+  });
+
+  it('covers short docs fully without duplicates when windows overlap', () => {
+    expect(windowPageNumbers(10, 8, 4)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(windowPageNumbers(3, 8, 4)).toEqual([1, 2, 3]);
+    expect(windowPageNumbers(1, 8, 4)).toEqual([1]);
+  });
+
+  it('handles a zero-size back window (front-only, legacy behavior)', () => {
+    expect(windowPageNumbers(30, 5, 0)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('handles a zero-size front window (back-only)', () => {
+    expect(windowPageNumbers(30, 0, 4)).toEqual([27, 28, 29, 30]);
   });
 });
 

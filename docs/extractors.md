@@ -405,12 +405,34 @@ export function vlmConfigFromEnv(): VlmConfig {
 
 ### 3.2 요청 — OpenAI 호환 `/chat/completions` + 이미지 첨부
 
-`extract()` 는 모든 페이지 텍스트를 이어 붙여 **최대 24000자**로 자르고, 문서유형별 프롬프트(§4)를 만든 뒤
-요청 콘텐츠를 조립한다. 텍스트 파트에 더해, `input.imagePaths` 의 각 이미지를 읽어 **base64 로 인코딩**해
+`extract()` 는 먼저 **문서유형별로 페이지를 고른 뒤**(`selectPagesForExtraction`) 텍스트를
+`buildTextWindow()` 로 조립한다(`VLM_MAX_TEXT_CHARS`, 기본 12000자).
+
+**`selectPagesForExtraction` — 왜 필요한가.** ingest 는 앞 N + 뒤 M 페이지를 모두 담아오지만, 저자는
+문서 **앞쪽**에만 있고 뒤 페이지(본문·참고문헌)는 노이즈다. 12쪽 논문 전체를 그대로 넣었더니 7B 모델이
+"참고문헌 인용 저자 제외" 규칙을 **1페이지 저자 블록에까지 과적용해 0명**을 반환하는 사례를 실측했다
+(샘플 학술논문). 그래서 유형별로 페이지를 좁힌다:
+
+| docType | 보는 페이지 | 이유 |
+|---|---|---|
+| `journal_article` · `representative_research` · `hindex` | **앞 2페이지만** | 저자 블록은 제목 바로 아래(1페이지 상단)에만 |
+| `research_project` | 앞 + 뒤 윈도우 모두 | 참여연구진 명단이 맨 뒤에 붙을 수 있음 |
+| `degree_thesis` · 기타 | 앞쪽 연속 구간(뒤 윈도우 제외) | 인준/심사위원은 앞에, 본문 끝·감사의 글은 불필요 |
+
+그다음 `buildTextWindow()` 로 조립한다:
+
+- 각 페이지 앞에 **`[p.N]` 마커** — 모델의 `page` 필드를 실제 쪽번호에 근거시킨다.
+- PDF 앞/뒤 윈도우(§ingest) 때문에 쪽번호가 건너뛰면 **`…(X~Y쪽 생략)…` 마커** — 모델이 연속 문서로
+  오해하지 않게 한다.
+- 예산 초과 시 **앞 75% + 뒤 25% 분할**(사이에 `…(중략)…`) — 예전 head-only slice 는 보고서 **맨 뒤**
+  연구진 명단/감사의 글을 통째로 잘랐다.
+
+그 뒤 문서유형별 프롬프트(§4)를 만들고, `input.imagePaths` 의 각 이미지를 읽어 **base64 로 인코딩**해
 `image_url`(data URL) 파트로 첨부한다.
 
 ```ts
-const text = input.pages.map((p) => p.text).filter(Boolean).join('\n\n').slice(0, 24000);
+const pages = selectPagesForExtraction(input.pages, input.docType); // 유형별 페이지 선택
+const text = buildTextWindow(pages, maxChars); // [p.N] 마커 + 앞/뒤 예산 분할
 const { system, user } = buildExtractionPrompt(input.docType, text, input.selfName);
 
 const content: ChatContent[] = [{ type: 'text', text: user }];
@@ -451,12 +473,12 @@ sequenceDiagram
   participant E as VlmExtractor
   participant P as buildExtractionPrompt
   participant O as Ollama (/v1/chat/completions)
-  E->>P: docType, text(<=24000), selfName
+  E->>P: docType, buildTextWindow(pages, maxChars), selfName
   P-->>E: { system, user }
   E->>E: imagePaths 읽어 base64 첨부
   E->>O: POST messages(system,user+images), temp=0, json_object
-  O-->>E: choices[0].message.content (JSON 문자열)
-  E->>E: extractJsonBlock → JSON.parse → zod 검증
+  O-->>E: choices[0].message.content (+ finish_reason)
+  E->>E: parseVlmResponse — 항목별 관용 파싱(+잘림 복구)
   E-->>E: persons → RawPerson[]
 ```
 
@@ -481,49 +503,44 @@ try {
 
 HTTP 비정상 응답은 `VLM HTTP <status>: <body>` 형태의 에러로 던진다.
 
-### 3.4 응답 파싱 — `extractJsonBlock` → zod 검증 → role 매핑
+### 3.4 응답 파싱 — `parseVlmResponse` (항목별 관용 파싱 + 잘림 복구)
 
-모델이 산문·코드펜스를 섞어 답해도 견디도록, 원문에서 첫 JSON 객체만 뽑아낸다(`extractJsonBlock`,
-`src/lib/pipeline/extract/util.ts`): ```` ```json ```` 펜스를 우선 처리하고, 없으면 `{` 와 마지막 `}` 사이를
-잘라낸다. 그 뒤 `JSON.parse`.
+> 예전 구현은 zod 의 **all-or-nothing** 검증이었다: 항목 **1개**라도 형식이 어긋나면(`page:"1"` 문자열 등)
+> `safeParse` 실패 → **문서 전체가 0명**, 로그도 없음. 18저자 논문이 통째로 누락되는 주범이어서
+> 항목별 관용 파싱으로 교체했다 (`parseVlmResponse`, 단위테스트 `tests/vlm-parse.test.ts`).
 
-파싱된 객체는 zod 스키마로 검증한다.
+파싱 순서:
 
-```ts
-const personSchema = z.object({
-  name: z.string().min(1),
-  role: z.string().nullish(),
-  affiliation: z.string().nullish(),
-  source_kind: z.string().nullish(),
-  page: z.number().nullish(),
-  confidence: z.number().nullish(),
-  is_self: z.boolean().nullish(),
-});
-const responseSchema = z.object({ persons: z.array(personSchema).default([]) });
-```
-
-**검증 실패 시 `[]` 를 반환**한다(`safeParse` 가 실패하면 빈 결과 — 깨진 응답으로 가짜 사람을 만들지 않음).
-
-```ts
-const parsed = responseSchema.safeParse(json);
-if (!parsed.success) return [];
-```
+1. `JSON.parse(raw)` → 실패 시 `extractJsonBlock`(코드펜스/산문 제거) 후 재시도.
+2. persons 배열 탐색 — `{persons:[...]}` 외에 **최상위 배열**, **대체 키**(`{people:[...]}`),
+   **단일 person 객체**도 수용한다.
+3. **항목별** 변환(`toPerson`): `name` 만 필수. `page:"1"`/`confidence:"0.9"` 같은 문자열 숫자는
+   강제 변환, `is_self:"true"` 도 수용. 나머지 필드는 깨져도 `null` 로 강등될 뿐 항목을 죽이지 않는다.
+   이름이 없는 항목만 개별 제외(`dropped` 카운트 → `console.warn`).
+4. JSON 자체가 깨졌으면(토큰 한도 잘림 등) **부분 복구(salvage)**: 완전한 `{...}` 객체를 하나씩 파싱해
+   살아있는 person 들을 건진다(`salvaged=true` → `console.warn`). 응답의 `finish_reason==='length'` 도
+   잘림 경고로 로그된다.
+5. 복구조차 0건이면 **throw** — `run.ts` 가 `[pipeline] extract failed ...` 로 로그한다.
+   (예전처럼 무음으로 `[]` 를 반환하지 않는다. 이름을 지어내지 않는 원칙은 동일 — 복구도
+   모델이 실제로 답한 완전한 항목만 살린다.)
+6. JSON은 유효하지만 person 목록 형태가 아예 없는 응답(`{"error":...}` 등)은 `unrecognized=true`
+   로 표시되어 `console.warn` 된다 — 정상적인 빈 목록(`{"persons":[]}`)과 구분된다.
 
 검증을 통과한 각 person 은 `RawPerson` 으로 변환된다. 이때 모델의 자유로운 라벨/값들을 도메인 enum 으로
 **정규화**한다.
 
 ```ts
-const isSelf = p.is_self ?? (input.selfName ? namesMatch(p.name, input.selfName) : false);
+const isSelf = p.isSelf ?? (input.selfName ? namesMatch(p.name, input.selfName) : false);
 const person: RawPerson = {
   nameRaw: p.name,
   role: roleFromLabel(p.role) ?? defaultRoleForDoc(input.docType),
-  affiliation: p.affiliation ?? null,
-  sourceKind: normalizeSourceKind(p.source_kind),
+  affiliation: p.affiliation,
+  sourceKind: normalizeSourceKind(p.sourceKind),
   sourcePage: p.page ?? 1,
   confidence: clamp01(p.confidence ?? 0.6),
   isSelf,
-  ocrEngine: this.name,           // "vlm:<model>"
-  ocrConfidence: p.confidence ?? null,
+  ocrEngine: engine,              // "vlm:<model>"
+  ocrConfidence: p.confidence,
 };
 ```
 
@@ -782,13 +799,13 @@ stub 은 GPU 없이 즉시 동작하지만, 스캔/이미지 문서(특히 `hind
 | `name` | `stub` | `vlm:<model>` (예: `vlm:qwen3.5:9B`) |
 | GPU/모델 | 불필요 | 온프레 OpenAI 호환 엔드포인트 |
 | 결정론 | 예 | `temperature: 0` (모델 의존) |
-| 테스트 사용 | 예(유일) | 아니오 |
-| 텍스트 처리 | 정규식 휴리스틱 | 프롬프트 + LLM, 최대 24000자 |
+| 테스트 사용 | 예(유일) | 파싱/윈도우 헬퍼만 단위테스트(`tests/vlm-parse.test.ts`) |
+| 텍스트 처리 | 정규식 휴리스틱 | 프롬프트 + LLM, `VLM_MAX_TEXT_CHARS`(기본 12000자, 앞/뒤 분할) |
 | 이미지/비전 | 불가(hindex → `[]`) | 가능(base64 첨부) |
 | confidence | 0.9(thesis) / 0.85(article) 고정 | 모델 값 `clamp01`, 기본 0.6 |
 | `evidence` | 채움(원문 라인) | 미채움 |
 | `ocrEngine` | 미채움 | `vlm:<model>` |
-| 실패 시 | 못 찾으면 `[]` | HTTP/검증 실패 시 `[]` |
+| 실패 시 | 못 찾으면 `[]` | HTTP/복구불가 응답은 throw(워커 로그), 형식 오류는 항목별 제외+warn |
 
 두 구현 모두 **이름을 지어내지 않는다**는 원칙을 코드로 강제하며, 최종 판단은 사람이 한다는 시스템 전체
 철학을 공유한다. 다음 단계의 동일인 병합·검토 플래그는 [pipeline.md](./pipeline.md) 와

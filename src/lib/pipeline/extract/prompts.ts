@@ -8,6 +8,8 @@ export interface ExtractionPrompt {
 const COMMON_RULES = `반드시 지켜라:
 - 문서에 실제로 나타난 이름만 추출한다. 없으면 빈 배열을 반환한다. 절대 이름을 지어내지 마라.
 - 참고문헌 / References / Bibliography / 참고자료에 인용된 저자는 절대 추출하지 않는다.
+- 단, 제목 바로 아래(1페이지 상단)에 콤마로 나열된 "저자 블록"의 이름은 위 참고문헌 제외 규칙과
+  무관하게 반드시 모두 추출한다. 영문 이름(예: "Choong-Ki Kim")은 번역하지 말고 그대로 둔다.
 - 출력은 JSON 객체 하나만. 형식:
   {"persons":[{"name":string,"role":string,"affiliation":string|null,"source_kind":string,"page":number,"confidence":number,"is_self":boolean}]}
 - role 허용값: supervisor, co_supervisor, committee, department_head, principal_investigator, research_staff, coauthor, project_manager.
@@ -16,7 +18,7 @@ const COMMON_RULES = `반드시 지켜라:
 
 export function buildExtractionPrompt(docType: DocType, text: string, selfName?: string): ExtractionPrompt {
   const selfNote = selfName
-    ? `\n지원자 본인 이름은 "${selfName}" 이다. 본인으로 판단되면 is_self=true 로 표시하라.`
+    ? `\n지원자 본인 이름은 "${selfName}"(영문 표기일 수 있음)이다. 본인이 저자/연구진 목록에 있으면 빼지 말고 추출하되 is_self=true 로 표시하라.`
     : '';
 
   let task: string;
@@ -28,7 +30,9 @@ export function buildExtractionPrompt(docType: DocType, text: string, selfName?:
     case 'representative_research':
     case 'journal_article':
       task =
-        '논문 1페이지 저자 블록에서 공저자(coauthor)를 추출하라. 소속/이메일이 있으면 affiliation 에 담아라. 본문/참고문헌의 인용 저자는 제외한다.';
+        '논문 1페이지 상단 저자 블록(제목 바로 아래 콤마로 나열된 이름들)에서 공저자(coauthor)를 ' +
+        '한 명도 빠짐없이 추출하라. 소속/이메일이 있으면 affiliation 에 담아라. 본문·참고문헌에 인용된 ' +
+        '저자는 제외하되, 1페이지 저자 블록은 반드시 포함한다.';
       break;
     case 'research_project':
       task =

@@ -118,6 +118,14 @@ export interface DocumentMark {
   cropPath?: string | null;
 }
 
+/** One taxonomy path an expert is registered under (대분류 > 중분류 > 소분류 > 세부분야). */
+export interface ExpertField {
+  dae: string;
+  mid: string;
+  sub: string;
+  det: string;
+}
+
 /** Where an aggregated person was found — the provenance shown next to each name. */
 export interface SourceRef {
   documentId: string;

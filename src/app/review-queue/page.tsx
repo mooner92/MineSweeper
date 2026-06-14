@@ -24,8 +24,13 @@ export default async function ReviewQueuePage({
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
+          <nav aria-label="breadcrumb" className="flex items-center gap-1.5 text-xs text-fg-muted">
+            <Link href="/" className="hover:text-fg transition-colors">지원자 목록</Link>
+            <span aria-hidden className="text-stroke-strong">/</span>
+            <span className="font-medium text-fg" aria-current="page">검토 필요 큐</span>
+          </nav>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold">검토 필요 큐</h1>
+            <h1 className="text-2xl font-bold tracking-tight">검토 필요 큐</h1>
             {items.length > 0 && <span className="seed-badge-warning">{items.length}건</span>}
           </div>
           <p className="text-sm text-fg-muted">
@@ -60,20 +65,24 @@ export default async function ReviewQueuePage({
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((it) => (
-            <li key={it.flag.id} className="seed-card overflow-hidden">
+            <li key={it.flag.id} className="seed-card overflow-hidden transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-sm">
               {it.flag.flagType === 'ambiguous' && it.candidates ? (
                 // 동명이인/약어: 후보 이름별로 원문 파일·페이지 링크를 나열해 비교하게 한다.
-                <div className="space-y-2 p-3">
-                  <div className="flex items-center justify-between">
+                <div>
+                  {/* 헤더 바 — 이미지 카드와 동일한 패턴으로 통일(배지 위치 일관성) */}
+                  <div className="flex items-center justify-between gap-2 border-b border-stroke bg-bg-layer px-3 py-2">
                     <span className="seed-badge-warning">{FLAG_TYPE_LABELS_KO.ambiguous}</span>
-                    <span className="text-xs text-fg-subtle">
+                    <span className="text-xs font-medium text-fg-muted">
                       {it.applicantName ? (
-                        <Link href={`/applicants/${it.applicantId}`}>{it.applicantName}</Link>
+                        <Link href={`/applicants/${it.applicantId}`} className="hover:underline underline-offset-2">
+                          {it.applicantName}
+                        </Link>
                       ) : (
                         it.applicantId
                       )}
                     </span>
                   </div>
+                  <div className="space-y-2 p-3">
                   <p className="text-xs text-fg-muted">
                     같은 사람인지 다른 사람인지 — 아래 원문 페이지를 열어 비교하세요.
                   </p>
@@ -92,7 +101,7 @@ export default async function ReviewQueuePage({
                                 target="_blank"
                                 rel="noreferrer"
                                 title={`${s.filename} · 클릭하면 원문 ${s.page}쪽`}
-                                className="block no-underline"
+                                className="block no-underline text-info hover:text-info/80 hover:underline underline-offset-2"
                               >
                                 {s.sourceFormat === 'pdf' || s.sourceFormat === 'image' ? (
                                   // 해당 이름이 나온 페이지 썸네일(온디맨드 렌더·캐시). 클릭=원문 페이지.
@@ -128,10 +137,15 @@ export default async function ReviewQueuePage({
                       </li>
                     ))}
                   </ul>
+                  </div>
                 </div>
               ) : (
                 <>
               <div className="relative aspect-[4/3] bg-bg-layer">
+                {/* 플래그 유형 배지 — 이미지 위 절대 위치, 갤러리 스캔 시 유형 먼저 인식 */}
+                <span className="absolute left-2 top-2 z-10 seed-badge-warning shadow-sm">
+                  {FLAG_TYPE_LABELS_KO[it.flag.flagType]}
+                </span>
                 {it.flag.cropPath ? (
                   // Detected seal/signature region — show the crop directly (human eyeballs it).
                   // eslint-disable-next-line @next/next/no-img-element
@@ -157,7 +171,7 @@ export default async function ReviewQueuePage({
                           top: `${it.bbox.y * 100}%`,
                           width: `${it.bbox.w * 100}%`,
                           height: `${it.bbox.h * 100}%`,
-                          backgroundColor: 'rgba(255, 111, 15, 0.18)',
+                          backgroundColor: 'color-mix(in srgb, var(--seed-warning) 18%, transparent)',
                         }}
                       />
                     )}
@@ -169,11 +183,20 @@ export default async function ReviewQueuePage({
                 )}
               </div>
               <div className="space-y-1 p-3">
-                <div className="flex items-center justify-between">
-                  <span className="seed-badge-warning">{FLAG_TYPE_LABELS_KO[it.flag.flagType]}</span>
+                <div className="flex items-center justify-between gap-2">
+                  {/* 지원자 이름 — 갤러리 스캔 시 맥락 식별의 핵심 */}
+                  <p className="truncate text-sm font-semibold text-fg">
+                    {it.applicantName ? (
+                      <Link href={`/applicants/${it.applicantId}`} className="hover:underline underline-offset-2">
+                        {it.applicantName}
+                      </Link>
+                    ) : (
+                      it.applicantId
+                    )}
+                  </p>
                   {it.documentId && (
                     <a
-                      className="text-xs"
+                      className="shrink-0 text-xs text-fg-muted hover:text-fg transition-colors"
                       href={`/api/file/${it.documentId}`}
                       target="_blank"
                       rel="noreferrer"
@@ -182,15 +205,8 @@ export default async function ReviewQueuePage({
                     </a>
                   )}
                 </div>
-                <p className="truncate text-sm font-semibold">
-                  {it.personName ?? it.flag.label ?? it.filename ?? '문서'}
-                </p>
-                <p className="text-xs text-fg-muted">
-                  {it.applicantName ? (
-                    <Link href={`/applicants/${it.applicantId}`}>{it.applicantName}</Link>
-                  ) : (
-                    it.applicantId
-                  )}
+                <p className="truncate text-xs text-fg-muted">
+                  {it.personName ?? it.flag.label ?? it.filename ?? '—'}
                 </p>
               </div>
                 </>
@@ -222,7 +238,7 @@ function FilterChip({
       className={`no-underline ${
         active
           ? `${chip} bg-accent text-fg-oncolor`
-          : `${chip} border border-stroke bg-bg text-fg-muted hover:bg-bg-layer`
+          : `${chip} border border-stroke-strong bg-bg text-fg-muted no-underline hover:border-accent/40 hover:bg-accent-subtle/30 hover:text-fg`
       }`}
     >
       {label} {count}

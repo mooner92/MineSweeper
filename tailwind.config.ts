@@ -7,6 +7,7 @@ import type { Config } from 'tailwindcss';
  * foreground scale, a carrot accent, plus success/warning for the review badges).
  */
 const config: Config = {
+  darkMode: 'class',
   content: ['./src/**/*.{ts,tsx}'],
   theme: {
     extend: {
@@ -30,6 +31,10 @@ const config: Config = {
           DEFAULT: 'var(--seed-accent)',
           pressed: 'var(--seed-accent-pressed)',
           subtle: 'var(--seed-accent-subtle)',
+        },
+        info: {
+          DEFAULT: 'var(--seed-info)',
+          subtle: 'var(--seed-info-subtle)',
         },
         success: {
           DEFAULT: 'var(--seed-success)',

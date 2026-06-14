@@ -1,4 +1,4 @@
-import { count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from '@/db/client';
 import {
   applicants,
@@ -48,8 +48,10 @@ export async function getApplicants(): Promise<ApplicantSummary[]> {
       name: applicants.name,
       round: applicants.recruitmentRound,
       createdAt: applicants.createdAt,
-      total: count(personAggregates.id),
-      needsHuman: sql<number>`coalesce(sum(case when ${personAggregates.needsHuman} then 1 else 0 end), 0)`,
+      // 본인(isSelf) 행은 '식별 연관자'가 아니므로 제외 — 상세 페이지의 연관자 수와 일치시킨다.
+      total: sql<number>`count(case when not ${personAggregates.isSelf} then ${personAggregates.id} end)`,
+      // 사람이 확정(confirm/edit)한 행은 더 이상 검토 대상이 아니다 — pending만 센다.
+      needsHuman: sql<number>`coalesce(sum(case when ${personAggregates.needsHuman} and not ${personAggregates.isSelf} and ${personAggregates.finalStatus} = 'pending' then 1 else 0 end), 0)`,
       docCount: sql<number>`(select count(*) from ${documents} where ${documents.applicantId} = ${applicants.id})`,
       jobStatus: sql<string | null>`(select status from ${jobs} where json_extract(${jobs.payload}, '$.applicantId') = ${applicants.id} order by ${jobs.createdAt} desc limit 1)`,
     })
@@ -70,6 +72,8 @@ export interface ReviewData {
   aggregates: PersonAggregate[];
   documents: Document[];
   job: Job | null;
+  /** 열려 있는 검토 플래그 수 — 자동 점검 카드(V4)에 쓰인다. */
+  openFlags: number;
 }
 
 export async function getApplicantReview(id: string): Promise<ReviewData | null> {
@@ -97,7 +101,16 @@ export async function getApplicantReview(id: string): Promise<ReviewData | null>
         .limit(1)
     )[0] ?? null;
 
-  return { applicant, aggregates, documents: docs, job };
+  const openFlags = Number(
+    (
+      await db
+        .select({ n: count() })
+        .from(reviewFlags)
+        .where(and(eq(reviewFlags.applicantId, id), eq(reviewFlags.status, 'open')))
+    )[0]?.n ?? 0,
+  );
+
+  return { applicant, aggregates, documents: docs, job, openFlags };
 }
 
 /** A candidate name in an 동명이인/약어(ambiguous) flag, with the files/pages where it appeared. */
