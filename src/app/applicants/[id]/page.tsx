@@ -203,8 +203,19 @@ export default async function ApplicantPage({
     openFlags,
     sameAffiliationCount: sameAff.size,
   });
-  const isTextish = (d: (typeof documents)[number]) =>
-    d.hasTextLayer || d.sourceFormat === 'text' || d.sourceFormat === 'hwp';
+  // 추출 누락 안전망 — 관련인은 무조건 제척이므로 '못 뽑은 것'이 가장 위험하다. 자동추출 0명(비self)
+  // 문서는 사유와 함께 상단 게이트로 모아, 사람이 원문에서 누락 관련인을 반드시 확인하게 한다.
+  const manualCheck = documents
+    .filter((d) => (docPeople.get(d.id) ?? 0) === 0)
+    .map((d) => ({
+      d,
+      reason:
+        d.sourceFormat === 'image' || !d.hasTextLayer
+          ? '스캔·이미지 — 비전 추출, 직접 확인'
+          : d.sourceFormat === 'hwp'
+            ? 'HWP — 직접 확인'
+            : '텍스트 있는데 0명 — 추출 누락 가능',
+    }));
 
   const flatLabel =
     view === 'review' ? '검토 필요' : isRoleView ? ROLE_LABELS_KO[view as Role] : '전체';
@@ -299,9 +310,43 @@ export default async function ApplicantPage({
           index={4}
           value={documents.length}
           label="문서"
-          detail={`텍스트 검출 0명 ${documents.filter((d) => isTextish(d) && (docPeople.get(d.id) ?? 0) === 0).length}건`}
+          detail={manualCheck.length > 0 ? `수동 확인 ${manualCheck.length}건` : '전 문서 추출됨'}
         />
       </section>
+
+      {/* 추출 누락 안전망 — 자동추출 0명/스캔·이미지 문서를 지나칠 수 없게 상단에 모은다.
+          관련인은 모두 제척되므로, 누락된 관련인이 없는지 사람이 원문을 직접 확인해야 한다. */}
+      {manualCheck.length > 0 && (
+        <section className="seed-card overflow-hidden border-l-4 border-l-warning">
+          <div className="flex flex-wrap items-center gap-2 border-b border-stroke bg-warning-subtle px-4 py-2.5">
+            <span aria-hidden className="text-base">⚠</span>
+            <span className="text-sm font-bold text-warning">수동 확인 필요 {manualCheck.length}건</span>
+            <span className="text-xs text-fg-muted">
+              — 자동 추출이 0명이거나 스캔·이미지 문서입니다. 관련인은 모두 제척되므로, 빠진 관련인이
+              없는지 원문을 직접 확인하세요.
+            </span>
+          </div>
+          <ul className="divide-y divide-stroke">
+            {manualCheck.map(({ d, reason }) => (
+              <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-sm">
+                <span className="seed-badge-neutral shrink-0">{DOC_TYPE_LABELS_KO[d.docType]}</span>
+                <span className="min-w-0 flex-1 truncate text-fg" title={d.filename}>
+                  {d.filename}
+                </span>
+                <span className="shrink-0 text-xs font-medium text-warning">{reason}</span>
+                <a
+                  href={`/api/file/${d.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="seed-btn-neutral shrink-0 px-2 py-0.5 text-xs no-underline"
+                >
+                  원문 열기 ↗
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* 본문 2단 — 넓은 화면: 메인(관계자·초빙·문서) + 우측 사이드레일(제척·자동점검).
           좁은 화면(<xl)에선 1열로 접히고 진단(제척·점검)을 메인 위로 올린다(order-first). */}
@@ -451,8 +496,8 @@ export default async function ApplicantPage({
                   format: d.sourceFormat,
                   people: docPeopleList.get(d.id) ?? [],
                   pageCount: d.pageCount,
-                  // 텍스트가 있는데 0명 → 추출 실패 가능성. 카드에 경고 배지로 드러낸다.
-                  zeroWarn: isTextish(d) && (docPeople.get(d.id) ?? 0) === 0,
+                  // 자동추출 0명(비self) → 누락 가능성. 형식 무관 카드에 경고 배지(안전망).
+                  zeroWarn: (docPeople.get(d.id) ?? 0) === 0,
                 }))}
               />
             </div>
