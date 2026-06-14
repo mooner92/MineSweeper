@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractAuthorsFromText,
+  extractInstitutionRoster,
   extractRosterFromText,
   mergeRoster,
 } from '@/lib/pipeline/extract/roster';
@@ -103,5 +104,30 @@ describe('extractAuthorsFromText (논문 저자 블록 결정적 추출)', () =>
 
   it('returns nothing when there is no author-block pattern', () => {
     expect(extractAuthorsFromText([page(1, '지도교수 김철수 심사위원 이영희 박 민 수의 석사학위')])).toHaveLength(0);
+  });
+});
+
+// 공동연구개발기관 등 표(이름 직위 전화 이메일 행) — 7B가 일부만 읽던 케이스.
+const INST_TEXT =
+  '공동연구 개발기관 등 기관명 책임자 직위 휴대전화 전자우편 역할 기관유형 ' +
+  '(주)가나연구소 홍길동 대표 010-1111-2222 hong@gana.co.kr 공동 중소기업 ' +
+  '서울대학교 김철수 교수 010-3333-4444 kim@snu.ac.kr 공동 대학 ' +
+  '한국환경연구원 이영희 선임연구원 010-5555-6666 lee@kei.re.kr 공동 정부출연연';
+
+describe('extractInstitutionRoster (공동연구개발기관 표)', () => {
+  it('extracts name+title rows anchored by a following email', () => {
+    const out = extractInstitutionRoster([page(1, INST_TEXT)]);
+    expect(out.map((p) => p.nameRaw).sort()).toEqual(['김철수', '이영희', '홍길동'].sort());
+    expect(out.every((p) => p.role === 'research_staff' && p.ocrEngine === 'institution:regex')).toBe(true);
+  });
+
+  it('does NOT match name+title without a following email (오탐 차단)', () => {
+    expect(extractInstitutionRoster([page(1, '연구책임자 김철수 교수 입니다 본문')])).toHaveLength(0);
+  });
+
+  it('tags the applicant via selfName', () => {
+    const out = extractInstitutionRoster([page(1, INST_TEXT)], '김철수');
+    expect(out.find((p) => p.nameRaw === '김철수')?.isSelf).toBe(true);
+    expect(out.find((p) => p.nameRaw === '홍길동')?.isSelf).toBe(false);
   });
 });

@@ -113,3 +113,36 @@ export function extractAuthorsFromText(pages: PageBundle[], selfName?: string): 
   }
   return [...out.values()];
 }
+
+// ── 공동연구개발기관 등 명단 표 결정적 추출 ───────────────────────────────────
+// 연구보고서 1페이지의 '공동연구개발기관 등' 표는 `기관 이름 직위 전화 이메일 역할 유형` 행이라
+// 괄호도 위첨자도 없다. 7B는 이 표(20~30행)도 일부만 읽고 끊는다. 각 행에 이메일이 있는 점을
+// 앵커로 삼아 '이름 + 직위 + …이메일'을 뽑으면 오탐 없이 전원 추출된다. 공동연구원=공동과제 제척 대상.
+const INSTITUTION_ROW_RE =
+  /([가-힣]{2,4})\s+(?:대표|교수|부교수|조교수|실장|처장|단장|소장|이사|부장|차장|과장|팀장|원장|책임연구원|선임연구원|수석연구원|연구위원|연구원|위원|책임|선임|수석|박사|연구사)\s+[A-Za-z0-9.\s()+-]*@/g;
+
+/** '공동연구개발기관 등' 표(이름+직위+이메일 행)에서 담당자를 결정적으로 추출한다. */
+export function extractInstitutionRoster(pages: PageBundle[], selfName?: string): RawPerson[] {
+  const byName = new Map<string, RawPerson>();
+  for (const pg of pages) {
+    if (!pg.text) continue;
+    const re = new RegExp(INSTITUTION_ROW_RE.source, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(pg.text)) !== null) {
+      const name = m[1];
+      if (byName.has(name)) continue;
+      byName.set(name, {
+        nameRaw: name,
+        role: 'research_staff', // 공동연구개발기관 책임자 = 공동연구자
+        affiliation: null,
+        sourceKind: 'printed',
+        sourcePage: pg.pageNumber,
+        confidence: 0.85,
+        isSelf: selfName ? namesMatch(name, selfName) : false,
+        ocrEngine: 'institution:regex',
+        ocrConfidence: null,
+      });
+    }
+  }
+  return [...byName.values()];
+}

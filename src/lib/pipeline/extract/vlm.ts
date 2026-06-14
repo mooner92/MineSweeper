@@ -3,7 +3,12 @@ import type { DocType } from '@/lib/domain';
 import { namesMatch } from '@/lib/names';
 import type { ExtractInput, Extractor, PageBundle, RawPerson } from '@/lib/pipeline/types';
 import { buildExtractionPrompt } from './prompts';
-import { extractAuthorsFromText, extractRosterFromText, mergeRoster } from './roster';
+import {
+  extractAuthorsFromText,
+  extractInstitutionRoster,
+  extractRosterFromText,
+  mergeRoster,
+} from './roster';
 import { defaultRoleForDoc, roleFromLabel } from './roles';
 import { clamp01, extractJsonBlock, normalizeSourceKind } from './util';
 
@@ -326,7 +331,11 @@ export async function extractFromVlmEndpoint(
   // 연구보고서: 참여연구진 표(이름(역할)). 논문/대표연구실적: 1페이지 저자 블록(긴 콤마 목록).
   let supplement: RawPerson[] = [];
   if (input.docType === 'research_project') {
-    supplement = extractRosterFromText(pages, input.selfName);
+    // 참여연구진 표(이름(역할)) + 공동연구개발기관 표(이름 직위 …이메일) 둘 다 결정적 추출.
+    supplement = mergeRoster(
+      extractRosterFromText(pages, input.selfName),
+      extractInstitutionRoster(pages, input.selfName),
+    );
   } else if (input.docType === 'journal_article' || input.docType === 'representative_research') {
     supplement = extractAuthorsFromText(pages, input.selfName);
   }
