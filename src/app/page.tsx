@@ -117,7 +117,7 @@ export default async function HomePage() {
                         {/* 상태 색 바 — 세로로 훑을 때 색 하나로 즉시 스캔 */}
                         <span
                           aria-hidden
-                          className={`pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-seed-lg ${
+                          className={`pointer-events-none absolute left-0 top-0 z-10 h-full w-1 rounded-l-seed-lg ${
                             a.jobStatus === 'error'
                               ? 'bg-danger'
                               : a.needsHuman > 0
