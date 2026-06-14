@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { detectFormat, ingest } from '@/lib/pipeline/ingest';
-import { windowPageNumbers } from '@/lib/pipeline/ingest/pdf';
+import { rosterPageNumbers, windowPageNumbers } from '@/lib/pipeline/ingest/pdf';
 import { MINI_PDF } from './fixtures';
 
 const tmp = mkdtempSync(join(tmpdir(), 'ms-ingest-'));
@@ -40,6 +40,42 @@ describe('windowPageNumbers (PDF 앞N+뒤M 윈도우)', () => {
 
   it('handles a zero-size front window (back-only)', () => {
     expect(windowPageNumbers(30, 0, 4)).toEqual([27, 28, 29, 30]);
+  });
+});
+
+describe('rosterPageNumbers (윈도우 밖 명단 페이지 탐지)', () => {
+  const blank = (n: number) => Array.from({ length: n }, () => '본문 데이터 표 그래프');
+
+  it('finds a 참여자 명단 appendix page outside the front/back window', () => {
+    // 162쪽 문서, 윈도우=앞8+뒤4. 명단은 p129(부록) — 윈도우 밖.
+    const texts = blank(162);
+    texts[128] = '제 6 장 부록 6.1 참여자 인적사항 6.1.2 참여자 명단 성 명 연령 담당업무';
+    const win = new Set(windowPageNumbers(162, 8, 4));
+    expect(rosterPageNumbers(texts, win)).toEqual([129]);
+  });
+
+  it('matches roster headers despite pdfjs splitting characters with spaces', () => {
+    const texts = blank(60);
+    texts[40] = '... 공동연구 개발기관 등 기관명 책임자 ...'; // pdfjs가 '공동연구 개발기관'으로 분리
+    texts[41] = '... 참여 연구진 명단 ...';
+    const win = new Set(windowPageNumbers(60, 8, 4));
+    expect(rosterPageNumbers(texts, win)).toEqual([41, 42]);
+  });
+
+  it('does NOT match reference/citation pages (인용문헌·참고자료)', () => {
+    const texts = blank(60);
+    texts[40] = '6.2 인용문헌 및 참고자료 홍길동 , 김철수 , 이영희 , 1993. 원색한국패류도감';
+    const win = new Set(windowPageNumbers(60, 8, 4));
+    expect(rosterPageNumbers(texts, win)).toEqual([]);
+  });
+
+  it('skips pages already inside the window and respects the cap', () => {
+    const texts = blank(40);
+    texts[2] = '참여자 명단'; // p3 — 윈도우(앞8) 안 → 중복 추가 안 함
+    for (let i = 20; i < 40; i++) texts[i] = '참여연구진 명단'; // 윈도우 밖 20장
+    const win = new Set(windowPageNumbers(40, 8, 4));
+    expect(rosterPageNumbers(texts, win, 12)).toHaveLength(12); // cap=12
+    expect(rosterPageNumbers(texts, win)).not.toContain(3); // 윈도우 안 페이지 제외
   });
 });
 

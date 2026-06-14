@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   extractAuthorsFromText,
   extractInstitutionRoster,
+  extractParticipantRoster,
   extractRosterFromText,
   mergeRoster,
+  supplementRoster,
 } from '@/lib/pipeline/extract/roster';
 import type { PageBundle, RawPerson } from '@/lib/pipeline/types';
 
@@ -129,5 +131,69 @@ describe('extractInstitutionRoster (공동연구개발기관 표)', () => {
     const out = extractInstitutionRoster([page(1, INST_TEXT)], '김철수');
     expect(out.find((p) => p.nameRaw === '김철수')?.isSelf).toBe(true);
     expect(out.find((p) => p.nameRaw === '홍길동')?.isSelf).toBe(false);
+  });
+});
+
+// 부록 '참여자 명단' 표(성명 나이 재직기간 소속/직책 …) — 이메일·괄호역할 없어 다른 추출기로는 못 잡음.
+// 실제 보고서가 pdfjs로 평탄화된 형태(부산 용호만 보고서 p.129 구조). 7B/윈도우가 놓치던 케이스.
+const PARTICIPANT_TEXT =
+  '제 6 장 부록 6.1 참여자 인적사항 6.1.2 참여자 명단 ' +
+  '성 명 연령 ( 세 ) 재직기간 소속 / 직책 최종학력 자격증 담당업무 ' +
+  '홍길동 52 20 년 /6 월 지오연구소 / 부사장 박사 해양기술사 업무총괄 ' +
+  '김철수 48 20 년 /1 월 지오연구소 / 상무 석사 해양기술사 해양수질 ' +
+  '이영희 31 3 년 /9 월 지오연구소 / 전임 석사 해양환경기사 해양퇴적물';
+
+describe('extractParticipantRoster (참여자 명단 표)', () => {
+  it('extracts every 성명+나이+재직기간 row on an anchored page', () => {
+    const out = extractParticipantRoster([page(129, PARTICIPANT_TEXT)]);
+    expect(out.map((p) => p.nameRaw).sort()).toEqual(['김철수', '이영희', '홍길동'].sort());
+    expect(out.every((p) => p.role === 'research_staff' && p.ocrEngine === 'participant:regex')).toBe(
+      true,
+    );
+    expect(out.every((p) => p.sourcePage === 129)).toBe(true);
+  });
+
+  it('does NOT extract rows on a page without the 참여자 명단 anchor (오탐 차단)', () => {
+    // 같은 '이름 나이 년' 패턴이 본문에 우연히 있어도 명단 헤더가 없으면 무시.
+    expect(extractParticipantRoster([page(5, '홍길동 52 20 년 근무한 베테랑이다')])).toHaveLength(0);
+  });
+
+  it('tags the applicant via selfName', () => {
+    const out = extractParticipantRoster([page(129, PARTICIPANT_TEXT)], '김철수');
+    expect(out.find((p) => p.nameRaw === '김철수')?.isSelf).toBe(true);
+    expect(out.find((p) => p.nameRaw === '홍길동')?.isSelf).toBe(false);
+  });
+});
+
+describe('supplementRoster (docType별 결정적 추출 단일 진입점)', () => {
+  it('research_project: 참여연구진 + 공동연구개발기관 + 참여자 명단 세 형식 모두 union', () => {
+    // 형식마다 이름을 다르게 둬 union(중복제거 후 3종 모두 기여)이 일어남을 확인.
+    const out = supplementRoster(
+      [
+        page(2, '참여 연구진 담당자 갑돌 ( 연구책임자 ) 을순 ( 연구원 )'),
+        page(1, '공동연구 개발기관 병수 교수 010-1 byeong@x.ac.kr 공동'),
+        page(129, '참여자 명단 성 명 연령 담당업무 정민 45 10 년 /2 월 소속 / 직책'),
+      ],
+      'research_project',
+    );
+    const names = out.map((p) => p.nameRaw);
+    expect(names).toContain('갑돌'); // 참여연구진(이름(역할))
+    expect(names).toContain('병수'); // 공동연구개발기관(이메일)
+    expect(names).toContain('정민'); // 참여자 명단(성명 나이 …)
+    const engines = new Set(out.map((p) => p.ocrEngine));
+    expect(engines).toContain('roster:regex');
+    expect(engines).toContain('institution:regex');
+    expect(engines).toContain('participant:regex');
+  });
+
+  it('journal_article: 저자 블록만 추출', () => {
+    const out = supplementRoster([page(1, PAPER)], 'journal_article');
+    expect(out.map((p) => p.nameRaw)).toContain('Minsu Kim');
+    expect(out.every((p) => p.ocrEngine === 'authors:regex')).toBe(true);
+  });
+
+  it('degree_thesis 등 그 외 docType은 빈 배열(결정적 추출 없음)', () => {
+    expect(supplementRoster([page(1, PARTICIPANT_TEXT)], 'degree_thesis')).toEqual([]);
+    expect(supplementRoster([page(1, PAPER)], 'hindex')).toEqual([]);
   });
 });

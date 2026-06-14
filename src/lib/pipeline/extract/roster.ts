@@ -1,4 +1,4 @@
-import { ROLES, type Role } from '@/lib/domain';
+import { type DocType, ROLES, type Role } from '@/lib/domain';
 import { namesMatch } from '@/lib/names';
 import type { PageBundle, RawPerson } from '@/lib/pipeline/types';
 
@@ -145,4 +145,59 @@ export function extractInstitutionRoster(pages: PageBundle[], selfName?: string)
     }
   }
   return [...byName.values()];
+}
+
+// ── 참여자 명단 표 결정적 추출 ────────────────────────────────────────────────
+// 보고서 부록의 '참여자 명단' 표는 `성명 연령 재직기간 소속/직책 최종학력 자격증 담당업무` 행이라
+// 이메일도 괄호역할도 없다(위 두 추출기로는 안 잡힘). 각 행이 `이름 나이 재직기간(N년)`으로 시작하는
+// 점을 앵커로 삼아 이름을 뽑는다. 표 헤더(참여자 명단/성명…담당업무)가 있는 페이지에서만 동작해 오탐 차단.
+const PARTICIPANT_ANCHOR = /참여\s*자?\s*명단|성\s*명[\s\S]{0,60}담당\s*업무/;
+const PARTICIPANT_ROW_RE = /([가-힣]{2,4})\s+\d{1,2}\s+\d{1,2}\s*년/g;
+
+/** '참여자 명단' 표(성명+나이+재직기간 행)에서 참여자를 결정적으로 추출한다. */
+export function extractParticipantRoster(pages: PageBundle[], selfName?: string): RawPerson[] {
+  const byName = new Map<string, RawPerson>();
+  for (const pg of pages) {
+    if (!pg.text || !PARTICIPANT_ANCHOR.test(pg.text)) continue;
+    const re = new RegExp(PARTICIPANT_ROW_RE.source, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(pg.text)) !== null) {
+      const name = m[1];
+      if (byName.has(name)) continue;
+      byName.set(name, {
+        nameRaw: name,
+        role: 'research_staff', // 참여자 명단 = 공동 참여연구자
+        affiliation: null,
+        sourceKind: 'printed',
+        sourcePage: pg.pageNumber,
+        confidence: 0.85,
+        isSelf: selfName ? namesMatch(name, selfName) : false,
+        ocrEngine: 'participant:regex',
+        ocrConfidence: null,
+      });
+    }
+  }
+  return [...byName.values()];
+}
+
+/**
+ * docType별 결정적(regex) 명단 추출의 단일 진입점. **추출기(VLM 등)의 성공/실패와 무관하게**
+ * 파이프라인(run.ts)에서 호출해 결과에 union한다 — 7B가 긴 표를 놓치거나 컨텍스트 한도(16k)로
+ * 통째로 실패해도 정형 명단(참여연구진·공동연구개발기관·참여자 명단·저자 블록)은 반드시 확보한다.
+ */
+export function supplementRoster(
+  pages: PageBundle[],
+  docType: DocType,
+  selfName?: string,
+): RawPerson[] {
+  if (docType === 'research_project') {
+    return mergeRoster(
+      mergeRoster(extractRosterFromText(pages, selfName), extractInstitutionRoster(pages, selfName)),
+      extractParticipantRoster(pages, selfName),
+    );
+  }
+  if (docType === 'journal_article' || docType === 'representative_research') {
+    return extractAuthorsFromText(pages, selfName);
+  }
+  return [];
 }

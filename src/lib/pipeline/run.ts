@@ -4,6 +4,7 @@ import { aggregate } from './aggregate';
 import { classifyDocType } from './classify';
 import { crossCheck } from './crosscheck';
 import { getExtractor } from './extract';
+import { mergeRoster, supplementRoster } from './extract/roster';
 import { detectFormat, ingest } from './ingest';
 import type {
   AggregatedPerson,
@@ -127,6 +128,18 @@ export async function runPipeline(
       // eslint-disable-next-line no-console
       console.error(`[pipeline] extract failed for ${filename} (${extractor.name}): ${errMsg(err)}`);
       raw = [];
+    }
+
+    // 정형 명단(참여연구진·공동연구개발기관·참여자 명단·저자 블록)의 결정적 추출. 추출기 성공/실패와
+    // 무관하게 항상 union — 7B가 긴 표를 놓치거나 컨텍스트 한도(16k)로 통째로 실패해도 명단을 확보한다.
+    const supplement = supplementRoster(ing.pages, docType, options.applicantName);
+    if (supplement.length > 0) {
+      const before = raw.length;
+      raw = mergeRoster(raw, supplement);
+      if (raw.length > before) {
+        // eslint-disable-next-line no-console
+        console.warn(`[pipeline] 결정적 명단 보강 ${raw.length - before}명 — ${filename}`);
+      }
     }
 
     // crossCheck runs per document (printed anchor ↔ seal/signature). NO-OP for non-thesis and

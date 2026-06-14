@@ -22,6 +22,28 @@ export function windowPageNumbers(numPages: number, front = FRONT_PAGES, back = 
   return [...nums].sort((a, b) => a - b);
 }
 
+// 명단 섹션이 부록(예: 162쪽 보고서의 121쪽 '참여자 인적사항')에 박혀 윈도우 밖에 있는 경우가 많다.
+// 전체 페이지 텍스트를 훑어(렌더 없이, 714쪽 ≈ 5초) 명단 섹션 헤더가 있는 페이지를 윈도우에 더한다.
+// 인용문헌/참고자료(논문 인용 목록)는 매칭되지 않도록 명단 전용 키워드만 쓴다. 공백은 pdfjs가 글자
+// 사이에 끼우므로 \s* 허용. 추가 페이지는 cap으로 제한(VLM 페이로드·지연 방어).
+const ROSTER_PAGE_RE =
+  /참여\s*연구\s*진|참여\s*자?\s*명단|참여\s*자?\s*인적\s*사항|연구진\s*명단|공동\s*연구\s*개발\s*기관|참여\s*인력/;
+const ROSTER_PAGE_CAP = 12;
+
+/** 윈도우 밖에서 명단 섹션 헤더가 보이는 페이지 번호(1-based). texts[i] = (i+1)쪽 텍스트. */
+export function rosterPageNumbers(
+  texts: string[],
+  windowSet: Set<number>,
+  cap = ROSTER_PAGE_CAP,
+): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < texts.length && out.length < cap; i++) {
+    const pageNo = i + 1;
+    if (!windowSet.has(pageNo) && ROSTER_PAGE_RE.test(texts[i])) out.push(pageNo);
+  }
+  return out;
+}
+
 /** Below this many characters on a page, we treat it as having no usable text layer. */
 const MIN_TEXT_CHARS = 12;
 
@@ -84,14 +106,25 @@ export async function ingestPdf(filepath: string): Promise<IngestResult> {
       useSystemFonts: true,
       verbosity: 0,
     }).promise;
-    for (const i of windowPageNumbers(doc.numPages)) {
-      const page = await doc.getPage(i);
-      const content = await page.getTextContent();
-      const text = content.items
-        .map((it) => it.str ?? '')
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+    // 전체 페이지 텍스트를 한 번 훑는다(렌더 없이 텍스트만 — 714쪽 ≈ 5초). 명단이 부록 등 윈도우
+    // 밖에 있어도 찾기 위함. 무거운 다운스트림(추출/비전)은 그대로 윈도우+명단 페이지로만 제한한다.
+    const texts: string[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const content = await (await doc.getPage(i)).getTextContent();
+      texts.push(
+        content.items
+          .map((it) => it.str ?? '')
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim(),
+      );
+    }
+    const windowSet = new Set(windowPageNumbers(doc.numPages));
+    const keep = [...new Set([...windowSet, ...rosterPageNumbers(texts, windowSet)])].sort(
+      (a, b) => a - b,
+    );
+    for (const i of keep) {
+      const text = texts[i - 1];
       const hasText = text.length >= MIN_TEXT_CHARS;
       if (hasText) hasTextLayer = true;
       pages.push({ pageNumber: i, text, hasText });

@@ -3,12 +3,6 @@ import type { DocType } from '@/lib/domain';
 import { namesMatch } from '@/lib/names';
 import type { ExtractInput, Extractor, PageBundle, RawPerson } from '@/lib/pipeline/types';
 import { buildExtractionPrompt } from './prompts';
-import {
-  extractAuthorsFromText,
-  extractInstitutionRoster,
-  extractRosterFromText,
-  mergeRoster,
-} from './roster';
 import { defaultRoleForDoc, roleFromLabel } from './roles';
 import { clamp01, extractJsonBlock, normalizeSourceKind } from './util';
 
@@ -239,9 +233,11 @@ export async function extractFromVlmEndpoint(
 ): Promise<RawPerson[]> {
   const engine = `vlm:${cfg.model}`;
   // Front/back split budget so the prompt fits the model context even for 수백~수천 쪽 reports
-  // while still covering names at the end. Tunable via VLM_MAX_TEXT_CHARS (NaN/0-safe).
+  // while still covering names at the end. 8000자(+이미지 토큰)는 16k 컨텍스트에 여유 있게 들어간다
+  // — 한글은 1자당 ~1.3토큰이라 12000자는 16385토큰으로 한도(16384)를 넘겨 통째로 400이 났다.
+  // 잘린 본문의 정형 명단은 run.ts의 supplementRoster가 별도로 보강한다. Tunable: VLM_MAX_TEXT_CHARS.
   const envChars = Number(process.env.VLM_MAX_TEXT_CHARS);
-  const maxChars = Number.isFinite(envChars) && envChars > 0 ? envChars : 12000;
+  const maxChars = Number.isFinite(envChars) && envChars > 0 ? envChars : 8000;
   const pages = selectPagesForExtraction(input.pages, input.docType);
   const text = buildTextWindow(pages, maxChars);
   const { system, user } = buildExtractionPrompt(input.docType, text, input.selfName);
@@ -327,26 +323,10 @@ export async function extractFromVlmEndpoint(
     return person;
   });
 
-  // 정형 포맷은 결정적(regex) 추출이 7B보다 정확 — VLM이 놓친 인원을 합친다(이름 미겹침만 추가).
-  // 연구보고서: 참여연구진 표(이름(역할)). 논문/대표연구실적: 1페이지 저자 블록(긴 콤마 목록).
-  let supplement: RawPerson[] = [];
-  if (input.docType === 'research_project') {
-    // 참여연구진 표(이름(역할)) + 공동연구개발기관 표(이름 직위 …이메일) 둘 다 결정적 추출.
-    supplement = mergeRoster(
-      extractRosterFromText(pages, input.selfName),
-      extractInstitutionRoster(pages, input.selfName),
-    );
-  } else if (input.docType === 'journal_article' || input.docType === 'representative_research') {
-    supplement = extractAuthorsFromText(pages, input.selfName);
-  }
-  if (supplement.length === 0) return vlmPersons;
-  const merged = mergeRoster(vlmPersons, supplement);
-  const added = merged.length - vlmPersons.length;
-  if (added > 0) {
-    // eslint-disable-next-line no-console
-    console.warn(`[${engine}] 결정적 추출로 ${added}명 보강 — ${input.filename}`);
-  }
-  return merged;
+  // 정형 명단(참여연구진·공동연구개발기관·참여자 명단·저자 블록)의 결정적(regex) 추출은
+  // run.ts(supplementRoster)에서 추출기 성공/실패와 무관하게 union한다 — 여기서 하면 VLM HTTP
+  // 실패(16k 초과·timeout) 시 명단까지 함께 유실되므로 의도적으로 이 함수 밖으로 옮겼다.
+  return vlmPersons;
 }
 
 /**
