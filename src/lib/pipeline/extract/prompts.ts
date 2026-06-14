@@ -10,6 +10,8 @@ const COMMON_RULES = `반드시 지켜라:
 - 참고문헌 / References / Bibliography / 참고자료에 인용된 저자는 절대 추출하지 않는다.
 - 단, 제목 바로 아래(1페이지 상단)에 콤마로 나열된 "저자 블록"의 이름은 위 참고문헌 제외 규칙과
   무관하게 반드시 모두 추출한다. 영문 이름(예: "Choong-Ki Kim")은 번역하지 말고 그대로 둔다.
+- 첨부된 이미지(스캔/이미지로 된 표 — 예: 공동연구개발기관·연구진 명단)가 있으면, 그 표의 모든
+  담당자 이름과 역할을 한 명도 빠짐없이 추출한다(이미지 속 표도 본문과 동일하게 처리).
 - 출력은 JSON 객체 하나만. 형식:
   {"persons":[{"name":string,"role":string,"affiliation":string|null,"source_kind":string,"page":number,"confidence":number,"is_self":boolean}]}
 - role 허용값: supervisor, co_supervisor, committee, department_head, principal_investigator, research_staff, coauthor, project_manager.

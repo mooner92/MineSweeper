@@ -14,6 +14,28 @@ import type { DocResult } from '@/lib/pipeline/run';
 import type { Extractor } from '@/lib/pipeline/types';
 import { runPipeline, type PipelineFile } from '@/lib/pipeline/run';
 
+/**
+ * 비전 OCR용 페이지 렌더러 — 비전 추출기(vlm/hybrid/ensemble)일 때만 네이티브 렌더러를 동적 import해
+ * 주입한다(stub 경로는 native canvas를 안 받는다). 무텍스트 PDF 페이지(이미지 표)를 PNG로 렌더,
+ * 재생성 가능한 renders/ 캐시(파일경로 해시 키)에 저장 → cleanup의 TTL 청소 대상.
+ */
+async function makeVisionRenderer(): Promise<
+  ((filepath: string, pageNumber: number) => Promise<string | null>) | undefined
+> {
+  const mode = process.env.EXTRACTOR_MODE ?? 'stub';
+  if (!process.env.VLM_MODEL || !['vlm', 'hybrid', 'ensemble'].includes(mode)) return undefined;
+  const { join } = await import('node:path');
+  const { createHash } = await import('node:crypto');
+  const { renderPdfPageToPng } = await import('@/lib/pipeline/render');
+  const dir = join(process.env.UPLOAD_DIR ?? './data/uploads', 'renders');
+  return async (filepath, pageNumber) => {
+    const key = createHash('sha1').update(filepath).digest('hex').slice(0, 12);
+    const out = join(dir, `${key}-p${pageNumber}.png`);
+    const r = await renderPdfPageToPng(filepath, pageNumber, out, 2);
+    return r?.path ?? null;
+  };
+}
+
 function flagForKind(sourceKind: SourceKind, confidence: number): FlagType | null {
   if (sourceKind === 'seal') return 'seal';
   if (sourceKind === 'handwritten') return 'handwriting';
@@ -71,7 +93,11 @@ export async function processApplicant(
     documentId: d.id,
   }));
 
-  const result = await runPipeline(files, { applicantName: applicant.name, extractor });
+  const result = await runPipeline(files, {
+    applicantName: applicant.name,
+    extractor,
+    renderPage: await makeVisionRenderer(),
+  });
 
   // Detect seal/signature/handwriting regions (opt-in, before the tx — slow I/O outside the txn).
   const marksByDoc = await detectMarksIfEnabled(result.documents);

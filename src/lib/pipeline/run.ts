@@ -41,7 +41,15 @@ export interface RunOptions {
   applicantName?: string;
   /** Defaults to the env-selected extractor (stub unless EXTRACTOR_MODE=vlm). */
   extractor?: Extractor;
+  /**
+   * 텍스트층이 없는 PDF 페이지(이미지 표 — 예: 공동연구개발기관 표)를 PNG로 렌더해 경로를 돌려준다.
+   * 워커가 네이티브 렌더러(render.ts)를 주입한다(앱/테스트엔 미주입 → 네이티브 의존성 분리).
+   */
+  renderPage?: (filepath: string, pageNumber: number) => Promise<string | null>;
 }
+
+/** 한 문서에서 비전 OCR로 렌더할 무텍스트 페이지 최대 수(VLM 페이로드·지연 제한). */
+const MAX_VISION_PAGES = 4;
 
 /** Run all 4 stages over an applicant's files and return per-doc + aggregated results. */
 export async function runPipeline(
@@ -95,6 +103,16 @@ export async function runPipeline(
     const imagePaths = ing.pages
       .map((p) => p.imagePath)
       .filter((x): x is string => Boolean(x));
+
+    // 텍스트층이 없는 PDF 페이지(이미지로만 된 표 — 공동연구개발기관/연구진 명단 등)는 렌더해 VLM
+    // 비전으로 OCR한다. pdfjs가 한 글자도 못 뽑는 표가 통째로 누락되던 문제를 메운다(워커에서만 동작).
+    if (options.renderPage && ing.format === 'pdf') {
+      const imagePages = ing.pages.filter((p) => !p.hasText && !p.imagePath).slice(0, MAX_VISION_PAGES);
+      for (const p of imagePages) {
+        const path = await options.renderPage(file.filepath, p.pageNumber);
+        if (path) imagePaths.push(path);
+      }
+    }
 
     let raw: RawPerson[] = [];
     try {
