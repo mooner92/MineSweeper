@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import { sharedInstitution } from '@/lib/checks';
 import { csvEscape } from '@/lib/csv';
 import { DOC_TYPE_LABELS_KO, ROLE_LABELS_KO } from '@/lib/domain';
+import { coiTypesFromRoles } from '@/lib/experts';
 import { estimateKoreanName } from '@/lib/hangulize';
 import type { AggregatedPerson } from '@/lib/pipeline/types';
 
@@ -9,6 +10,7 @@ export interface ExportRow {
   canonicalName: string;
   koreanNameEst: string;
   roles: string;
+  coiType: string;
   affiliation: string;
   sameAffiliation: string;
   sources: string;
@@ -35,6 +37,8 @@ export function toExportRows(aggregates: AggregatedPerson[], opts: ExportOptions
     // 값 자체에 '(추정)'을 붙여 셀만 복사돼도 확정 한글명처럼 보이지 않게 한다.
     koreanNameEst: koreanEst ? `${koreanEst}(추정)` : '',
     roles: a.roles.map((r) => ROLE_LABELS_KO[r]).join(', '),
+    // 제척 유형(NSF식 분류: 사제/공저/공동과제/심사) — 표준 산출물용. 본인은 제척 대상 아님.
+    coiType: a.isSelf ? '' : coiTypesFromRoles(a.roles).map((t) => t.label).join(', '),
     affiliation: a.affiliation ?? '',
     // 기관 단위 제척 근거 — 매칭된 기관명을 그대로 적는다(빈 값 = 무관 또는 판정 불가).
     sameAffiliation: a.isSelf ? '' : (sharedInstitution(selfAffs, a.affiliation) ?? ''),
@@ -49,6 +53,7 @@ const HEADERS: Array<{ key: keyof ExportRow; label: string }> = [
   { key: 'canonicalName', label: 'canonical_name' },
   { key: 'koreanNameEst', label: 'korean_name_est' },
   { key: 'roles', label: 'roles' },
+  { key: 'coiType', label: 'coi_type' },
   { key: 'affiliation', label: 'affiliation' },
   { key: 'sameAffiliation', label: 'same_affiliation' },
   { key: 'sources', label: 'sources' },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { assembleConflicts } from '@/lib/experts';
+import { assembleConflicts, coiTypesFromRoles } from '@/lib/experts';
 import type { Expert } from '@/db/schema';
+import type { SourceRef } from '@/lib/domain';
 import { nameKey } from '@/lib/names';
 
 /** 테스트용 전문가 — nameKey는 name에서 자동 산출(운영과 동일 로직). */
@@ -73,5 +74,67 @@ describe('assembleConflicts (전문가 풀 제척 매칭)', () => {
   it('returns empty for no persons or no candidates', () => {
     expect(assembleConflicts([], [expert('1', '한지우', 'A')])).toHaveLength(0);
     expect(assembleConflicts([{ name: '한지우', roles: [] }], [])).toHaveLength(0);
+  });
+});
+
+const src = (documentId: string, page: number, role: SourceRef['role']): SourceRef => ({
+  documentId,
+  filename: 'f.pdf',
+  docType: 'journal_article',
+  page,
+  role,
+  sourceKind: 'printed',
+  confidence: 0.9,
+});
+
+describe('coiTypesFromRoles (제척 유형 분류)', () => {
+  it('maps roles to NSF-style COI types, deduped by code', () => {
+    expect(coiTypesFromRoles(['supervisor']).map((t) => t.code)).toEqual(['G']);
+    expect(coiTypesFromRoles(['coauthor']).map((t) => t.label)).toEqual(['공저']);
+    expect(coiTypesFromRoles(['principal_investigator', 'research_staff']).map((t) => t.code)).toEqual([
+      'C',
+    ]); // 둘 다 공동과제(C) → dedup
+    expect(coiTypesFromRoles(['supervisor', 'coauthor']).map((t) => t.code).sort()).toEqual(['A', 'G']);
+  });
+});
+
+describe('assembleConflicts — 유형·근거·동명이인 신뢰도', () => {
+  it('attaches COI types and the matched sources (왜 걸렸나)', () => {
+    const out = assembleConflicts(
+      [{ name: '홍길동', roles: ['coauthor'], affiliation: '부산대학교', sources: [src('d1', 3, 'coauthor')] }],
+      [expert('1', '홍길동', '부산대학교')],
+    );
+    expect(out[0].coiTypes.map((t) => t.label)).toEqual(['공저']);
+    expect(out[0].sources).toEqual([{ documentId: 'd1', page: 3, docType: 'journal_article', role: 'coauthor' }]);
+  });
+
+  it('unique pool name → high confidence', () => {
+    const out = assembleConflicts(
+      [{ name: '홍길동', roles: ['supervisor'] }],
+      [expert('1', '홍길동', '서울대학교')],
+    );
+    expect(out[0].confidence).toBe('high');
+  });
+
+  it('homonym without corroboration → low confidence (확인 필요), sorted first', () => {
+    const out = assembleConflicts(
+      [{ name: '한지우', roles: ['coauthor'], affiliation: '카이스트' }],
+      [expert('1', '한지우', 'A연구원'), expert('2', '한지우', 'B대학교')],
+    );
+    expect(out.every((c) => c.confidence === 'low')).toBe(true);
+  });
+
+  it('homonym but same institution → high confidence (부차증거)', () => {
+    const out = assembleConflicts(
+      [{ name: '한지우', roles: ['coauthor'], affiliation: '서울대학교 환경대학원' }],
+      [
+        expert('1', '한지우', '서울대학교 지구환경과학부'), // 같은 기관 → 진짜 그 사람
+        expert('2', '한지우', '부산대학교'),
+      ],
+    );
+    expect(out.find((c) => c.expert.id === '1')?.confidence).toBe('high');
+    expect(out.find((c) => c.expert.id === '2')?.confidence).toBe('low');
+    // low(확인 필요)가 먼저 정렬된다.
+    expect(out[0].confidence).toBe('low');
   });
 });

@@ -75,7 +75,12 @@ export default async function ApplicantPage({
     findExpertConflicts(
       people
         .filter((p) => p.finalStatus !== 'rejected')
-        .map((p) => ({ name: p.canonicalName, roles: p.roles })),
+        .map((p) => ({
+          name: p.canonicalName,
+          roles: p.roles,
+          affiliation: p.affiliation,
+          sources: p.sources,
+        })),
     ),
   ]);
   const conflictKeys = new Set(conflicts.map((c) => c.expert.nameKey));
@@ -282,7 +287,13 @@ export default async function ApplicantPage({
           value={poolCount > 0 ? conflicts.length : '—'}
           label="제척 대상"
           tone={conflicts.length > 0 ? 'danger' : undefined}
-          detail={poolCount > 0 ? `전문가 풀 ${poolCount.toLocaleString()}명 대조` : '풀 미등록'}
+          detail={
+            poolCount === 0
+              ? '풀 미등록'
+              : conflicts.some((c) => c.confidence === 'low')
+                ? `확인 필요 ${conflicts.filter((c) => c.confidence === 'low').length}명 포함`
+                : `전문가 풀 ${poolCount.toLocaleString()}명 대조`
+          }
         />
         <StatCell
           index={4}
@@ -531,7 +542,9 @@ function ExpertConflictSection({
         <span className="h-4 w-1 shrink-0 rounded-full bg-danger" aria-hidden />
         <span className="font-semibold text-fg">전문가 풀 대조 — 제척 대상</span>
         <span className="text-fg-subtle">
-          풀 {poolCount.toLocaleString()}명 중 이름 일치 {conflicts.length}명
+          풀 {poolCount.toLocaleString()}명 중 일치 {conflicts.length}명
+          {conflicts.some((c) => c.confidence === 'low') &&
+            ` · 확인 필요 ${conflicts.filter((c) => c.confidence === 'low').length}`}
         </span>
       </header>
       {conflicts.length === 0 ? (
@@ -541,50 +554,53 @@ function ExpertConflictSection({
       ) : (
         <ul className="divide-y divide-stroke">
           {conflicts.map((c) => (
-            <li
-              key={c.expert.id}
-              className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5 px-4 py-3 text-sm"
-            >
-              <div className="min-w-0">
-                <p className="flex flex-wrap items-center gap-1.5 font-semibold text-fg">
-                  {c.expert.name}
-                  {c.homonymCount > 1 && (
-                    <span
-                      className="seed-badge-warning"
-                      title="풀에 같은 이름이 여럿 — 다른 사람일 수 있으니 소속·분야로 확인하세요"
-                    >
-                      동명이인 {c.homonymCount}
-                    </span>
-                  )}
-                </p>
-                <p className="mt-0.5 truncate text-xs text-fg-muted">
-                  {[c.expert.affiliation, c.expert.position].filter(Boolean).join(' · ') || '소속 미상'}
-                </p>
-                {c.expert.fields.length > 0 && (
-                  <p className="mt-0.5 truncate text-xs text-fg-subtle" title={fieldLabel(c.expert.fields)}>
-                    분야: {fieldLabel(c.expert.fields)}
-                  </p>
+            <li key={c.expert.id} className="space-y-1 px-4 py-3 text-sm">
+              <p className="flex flex-wrap items-center gap-1.5 font-semibold text-fg">
+                {c.expert.name}
+                {c.coiTypes.map((t) => (
+                  <span key={t.code} className="seed-badge-danger" title={`제척 유형: ${t.label}`}>
+                    {t.label}
+                  </span>
+                ))}
+                {c.confidence === 'low' && (
+                  <span
+                    className="seed-badge-warning"
+                    title={`풀에 같은 이름 ${c.homonymCount}명 · 소속 등 부차증거 없음 — 다른 사람일 수 있어 직접 대조 필요`}
+                  >
+                    확인 필요{c.homonymCount > 1 ? ` (동명이인 ${c.homonymCount})` : ''}
+                  </span>
                 )}
-              </div>
-              <div className="shrink-0 space-y-0.5 text-right">
-                <p className="text-xs text-fg-muted">
+              </p>
+              <p className="truncate text-xs text-fg-muted">
+                {[c.expert.affiliation, c.expert.position].filter(Boolean).join(' · ') || '소속 미상'}
+                {c.expert.fields.length > 0 && ` · ${fieldLabel(c.expert.fields)}`}
+              </p>
+              {/* 왜 걸렸나 — 근거 문서·페이지(클릭 시 원문 해당 쪽). */}
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-fg-subtle">
+                <span>
                   관계자 일치 <span className="font-medium text-fg">{c.matchedNames.join(', ')}</span>
-                </p>
-                <p className="flex flex-wrap justify-end gap-1">
-                  {c.roles.map((r) => (
-                    <span key={r} className="seed-badge-neutral">
-                      {ROLE_LABELS_KO[r]}
-                    </span>
-                  ))}
-                </p>
-                {c.expert.email && <p className="text-xs text-fg-subtle">{c.expert.email}</p>}
-              </div>
+                </span>
+                {c.sources.map((s, i) => (
+                  <a
+                    key={`${s.documentId}-${i}`}
+                    href={`/api/file/${s.documentId}#page=${s.page}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-info underline-offset-2 hover:underline"
+                    title="원문 해당 쪽 열기"
+                  >
+                    {DOC_TYPE_LABELS_KO[s.docType]} p.{s.page} {ROLE_LABELS_KO[s.role]} ↗
+                  </a>
+                ))}
+              </p>
+              {c.expert.email && <p className="text-xs text-fg-subtle">{c.expert.email}</p>}
             </li>
           ))}
         </ul>
       )}
       <p className="border-t border-stroke px-4 py-2 text-xs text-fg-subtle">
-        이름 일치 기준 후보입니다 — 동명이인일 수 있으니 소속·분야로 최종 확인하세요. 제척은 사람이 확정합니다.
+        유형·근거는 표준(NSF/NIH/COPE) 참고용 분류이며, 동명이인('확인 필요')일 수 있으니 근거 문서로 최종
+        확인하세요. 제척은 사람이 확정합니다.
       </p>
     </section>
   );
