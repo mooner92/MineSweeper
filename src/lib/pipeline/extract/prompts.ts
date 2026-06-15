@@ -44,7 +44,10 @@ export function buildExtractionPrompt(docType: DocType, text: string, selfName?:
       break;
     case 'hindex':
       task =
-        '구글스칼라 캡처 이미지에서 공저자 패널과 논문별 저자를 coauthor 로 추출하라. 약어형 이름(G Hong, J Carter)이 많다.';
+        '구글스칼라 캡처 이미지에서 (1) 좌측 Co-authors 패널과 (2) 논문별 저자 목록의 모든 사람을 ' +
+        'coauthor 로 한 명도 빠짐없이 추출하라. 약어형 이름(G Hong, J Carter)도 그대로 name 에 넣어라. ' +
+        '각 사람은 반드시 {"name":"이름"} 객체 하나로 출력하고 — 이름을 문자열만 나열하거나 논문 아래 ' +
+        'authors 배열로 중첩하지 말고, 모두 평평한 persons 배열에 담아라.';
       break;
     default:
       task = '문서에서 관계자(지도교수/심사위원/공저자 등)를 추출하라.';

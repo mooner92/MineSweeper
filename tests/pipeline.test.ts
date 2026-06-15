@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { toCsv, toXlsxBuffer } from '@/lib/export';
 import { runPipeline, type PipelineFile } from '@/lib/pipeline/run';
+import type { Extractor } from '@/lib/pipeline/types';
 import { ARTICLE_EN, THESIS_KO } from './fixtures';
 
 function buildApplicant(): PipelineFile[] {
@@ -47,6 +48,26 @@ describe('runPipeline (end-to-end with stub extractor)', () => {
 
     // Provenance is attached.
     expect(advisor?.sources.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('normalizes (downscales) image paths before handing them to the extractor', async () => {
+    const seen: string[][] = [];
+    const recorder: Extractor = {
+      name: 'recorder',
+      extract: async (input) => {
+        seen.push(input.imagePaths ?? []);
+        return [];
+      },
+    };
+    await runPipeline(buildApplicant(), {
+      applicantName: 'X',
+      extractor: recorder,
+      normalizeImage: async (p) => `${p}.norm`,
+    });
+    // The hindex image doc carries an imagePath; it must reach the extractor normalized.
+    const withImages = seen.find((paths) => paths.length > 0);
+    expect(withImages).toBeDefined();
+    expect(withImages?.every((p) => p.endsWith('.norm'))).toBe(true);
   });
 
   it('exports CSV and a valid XLSX workbook', async () => {

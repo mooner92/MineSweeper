@@ -36,6 +36,33 @@ export async function renderPdfPageToPng(
   }
 }
 
+/**
+ * Downscale an image so its longest side ≤ maxDim, written as PNG. Returns the resized path (or
+ * the ORIGINAL path untouched when it is already within bounds). Large images (예: 5MP 구글스칼라
+ * 캡처) blow up Qwen2.5-VL's vision-token count and cause request hangs/timeouts; capping the
+ * longest side keeps text legible while making the call reliably fast. Worker-only (native canvas).
+ */
+export async function resizeImageToMax(
+  srcPath: string,
+  outPath: string,
+  maxDim = 1568,
+): Promise<RenderedPage | null> {
+  try {
+    const img = await loadImage(srcPath);
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    if (scale >= 1) return { path: srcPath, width: img.width, height: img.height }; // already small
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const canvas = createCanvas(w, h);
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, canvas.toBuffer('image/png'));
+    return { path: outPath, width: w, height: h };
+  } catch {
+    return null;
+  }
+}
+
 /** Normalize an existing image file into a PNG we can crop from. Returns dims, or null. */
 export async function imageToPng(srcPath: string, outPath: string): Promise<RenderedPage | null> {
   try {

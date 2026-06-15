@@ -110,7 +110,8 @@ export function aggregate(
     const isSelf =
       g.isSelf || (selfName ? g.members.some((m) => namesMatch(m.nameRaw, selfName)) : false);
     const needsHuman =
-      ambiguous || g.members.some((m) => computeNeedsHuman(m.sourceKind, m.confidence));
+      ambiguous ||
+      g.members.some((m) => computeNeedsHuman(m.sourceKind, m.confidence, { docType: m.docType }));
 
     return {
       canonicalName,

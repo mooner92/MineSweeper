@@ -36,6 +36,27 @@ async function makeVisionRenderer(): Promise<
   };
 }
 
+/**
+ * 비전 입력 이미지 다운스케일러 — 큰 이미지(5MP 구글스칼라 캡처 등)는 VLM 비전 토큰 폭증으로
+ * 요청이 멈추거나 타임아웃되므로, 최대 변 VLM_MAX_IMAGE_DIM(기본 1568)으로 줄여 보낸다. 비전
+ * 모드일 때만 네이티브 리사이저를 동적 import(stub 경로 분리). 이미 작으면 원본 경로 그대로.
+ */
+async function makeImageNormalizer(): Promise<((imagePath: string) => Promise<string | null>) | undefined> {
+  const mode = process.env.EXTRACTOR_MODE ?? 'stub';
+  if (!process.env.VLM_MODEL || !['vlm', 'hybrid', 'ensemble'].includes(mode)) return undefined;
+  const { join } = await import('node:path');
+  const { createHash } = await import('node:crypto');
+  const { resizeImageToMax } = await import('@/lib/pipeline/render');
+  const dir = join(process.env.UPLOAD_DIR ?? './data/uploads', 'renders');
+  const maxDim = Number(process.env.VLM_MAX_IMAGE_DIM) || 1568;
+  return async (imagePath) => {
+    const key = createHash('sha1').update(`norm:${imagePath}:${maxDim}`).digest('hex').slice(0, 12);
+    const out = join(dir, `${key}.png`);
+    const r = await resizeImageToMax(imagePath, out, maxDim);
+    return r?.path ?? imagePath; // resize 실패 시 원본 유지(이미지 자체를 잃지 않도록)
+  };
+}
+
 function flagForKind(sourceKind: SourceKind, confidence: number): FlagType | null {
   if (sourceKind === 'seal') return 'seal';
   if (sourceKind === 'handwritten') return 'handwriting';
@@ -97,6 +118,7 @@ export async function processApplicant(
     applicantName: applicant.name,
     extractor,
     renderPage: await makeVisionRenderer(),
+    normalizeImage: await makeImageNormalizer(),
   });
 
   // Detect seal/signature/handwriting regions (opt-in, before the tx — slow I/O outside the txn).
@@ -123,7 +145,7 @@ export async function processApplicant(
         .where(eq(documents.id, doc.documentId));
 
       for (const p of doc.persons) {
-        const needsHuman = computeNeedsHuman(p.sourceKind, p.confidence);
+        const needsHuman = computeNeedsHuman(p.sourceKind, p.confidence, { docType: doc.docType });
         const personId = crypto.randomUUID();
         await tx.insert(extractedPersons).values({
           id: personId,

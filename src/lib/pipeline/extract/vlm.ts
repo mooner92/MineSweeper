@@ -124,12 +124,14 @@ export interface VlmParseResult {
   unrecognized: boolean;
 }
 
-/** Only `name` is required; every other field degrades to null instead of killing the item. */
-function toPerson(item: unknown): VlmPerson | null {
-  if (typeof item !== 'object' || item === null) return null;
-  const o = item as Record<string, unknown>;
-  const name = asStr(o.name);
-  if (!name) return null;
+// 모델이 이름을 `name` 외의 키로 주거나(author/full_name), 객체 없이 문자열만 나열하거나
+// (예: 구글스칼라 캡처 → ["G Hong","B Lee",…]), 논문별로 authors 배열을 중첩하는 경우가 있다.
+// 그대로 두면 toPerson 이 전부 버려(과거 h-지수 "이름 누락 14개 제외 → 0명" 원인) 누락된다.
+// 아래 itemToPersons 는 이 변형들을 모두 person 으로 회수한다(이름 있는 것만 — 오탐은 안 늘린다).
+const NAME_KEYS = ['name', 'author', 'full_name', 'fullName', '이름'] as const;
+const NESTED_LIST_KEYS = ['authors', 'names', 'people', 'persons', 'coauthors', 'members'] as const;
+
+function personFromObject(o: Record<string, unknown>, name: string): VlmPerson {
   return {
     name,
     role: asStr(o.role),
@@ -139,6 +141,39 @@ function toPerson(item: unknown): VlmPerson | null {
     confidence: asNum(o.confidence),
     isSelf: asBool(o.is_self),
   };
+}
+
+// 문자열만 나열된 이름(예: 구글스칼라 캡처 → ["G Hong","Wei Chen"])은 회수하되, 'garbage' 같은
+// 잡토큰까지 person 으로 만들지 않도록 "이름다움"을 본다: 한글/CJK 글자를 포함하거나, 대문자로
+// 시작하는 라틴 이름 형태(약어형 "A Kim", "BC Lee" 포함)일 때만 이름으로 인정한다.
+const NAME_LIKE = /[가-힣぀-鿿]|^[A-Z][A-Za-z'’.-]*(?:[ -][A-Z'’.-][A-Za-z'’.-]*)*$/;
+const nameLikeString = (s: string): boolean => s.length >= 2 && s.length <= 50 && NAME_LIKE.test(s);
+
+/** Expand one raw item into 0+ persons (string name, alternate name key, or nested author list). */
+function itemToPersons(item: unknown): VlmPerson[] {
+  if (typeof item === 'string') {
+    const name = asStr(item);
+    return name && nameLikeString(name)
+      ? [{ name, role: null, affiliation: null, sourceKind: null, page: null, confidence: null, isSelf: null }]
+      : [];
+  }
+  if (typeof item !== 'object' || item === null) return [];
+  const o = item as Record<string, unknown>;
+  // 직접 이름 키가 있으면 단일 인물로 (이름 있는 항목을 중첩 처리로 덮어쓰지 않도록 먼저 확인).
+  for (const k of NAME_KEYS) {
+    const name = asStr(o[k]);
+    if (name) return [personFromObject(o, name)];
+  }
+  // 이름이 없으면 논문별 그룹({authors:[...]}) 으로 보고 평탄화.
+  for (const k of NESTED_LIST_KEYS) {
+    if (Array.isArray(o[k])) return (o[k] as unknown[]).flatMap(itemToPersons);
+  }
+  return [];
+}
+
+/** Single-object → person (truncation-salvage 경로용). 회수된 첫 person 만 반환. */
+function toPerson(item: unknown): VlmPerson | null {
+  return itemToPersons(item)[0] ?? null;
 }
 
 /** Recover complete `{...}` person objects from broken/truncated JSON (incomplete tail is skipped). */
@@ -210,8 +245,8 @@ export function parseVlmResponse(raw: string): VlmParseResult {
   const persons: VlmPerson[] = [];
   let dropped = 0;
   for (const item of items) {
-    const p = toPerson(item);
-    if (p) persons.push(p);
+    const ps = itemToPersons(item);
+    if (ps.length) persons.push(...ps);
     else dropped += 1;
   }
   return { persons, dropped, salvaged: false, unrecognized };
@@ -227,9 +262,22 @@ export function parseVlmResponse(raw: string): VlmParseResult {
  * API — the base URL points at a local server. Throws on transport/HTTP/unparseable-response
  * error so the ensemble can treat a failed endpoint as "no result" without aborting the vote.
  */
+/** Retry-pass tuning. On a 0-person vision result we re-ask with temperature>0 (breaks the
+ * deterministic identical reply) + an explicit "name 필수, 빠짐없이" nudge. */
+export interface VlmCallOpts {
+  temperature?: number;
+  retryNudge?: boolean;
+}
+
+const RETRY_NUDGE =
+  '\n\n중요: 보이는 모든 사람을 한 명도 빠뜨리지 말고 추출하라. ' +
+  '각 사람은 반드시 {"name":"이름"} 객체 하나로 출력하고(약어형 G Hong 도 name 에 그대로), ' +
+  '이름만 문자열로 나열하거나 논문 아래 authors 배열로 중첩하지 마라.';
+
 export async function extractFromVlmEndpoint(
   cfg: VlmConfig,
   input: ExtractInput,
+  opts: VlmCallOpts = {},
 ): Promise<RawPerson[]> {
   const engine = `vlm:${cfg.model}`;
   // Front/back split budget so the prompt fits the model context even for 수백~수천 쪽 reports
@@ -241,8 +289,9 @@ export async function extractFromVlmEndpoint(
   const pages = selectPagesForExtraction(input.pages, input.docType);
   const text = buildTextWindow(pages, maxChars);
   const { system, user } = buildExtractionPrompt(input.docType, text, input.selfName);
+  const userText = opts.retryNudge ? user + RETRY_NUDGE : user;
 
-  const content: ChatContent[] = [{ type: 'text', text: user }];
+  const content: ChatContent[] = [{ type: 'text', text: userText }];
   for (const img of input.imagePaths ?? []) {
     const b64 = await readFile(img)
       .then((b) => b.toString('base64'))
@@ -267,7 +316,7 @@ export async function extractFromVlmEndpoint(
           { role: 'system', content: system },
           { role: 'user', content },
         ],
-        temperature: 0,
+        temperature: opts.temperature ?? 0,
         response_format: { type: 'json_object' },
       }),
       signal: controller.signal,
@@ -341,7 +390,17 @@ export class VlmExtractor implements Extractor {
     this.name = `vlm:${cfg.model}`;
   }
 
-  extract(input: ExtractInput): Promise<RawPerson[]> {
-    return extractFromVlmEndpoint(this.cfg, input);
+  async extract(input: ExtractInput): Promise<RawPerson[]> {
+    const persons = await extractFromVlmEndpoint(this.cfg, input);
+    // 비전 문서(이미지 동봉)가 0명이면 일시적 실패일 수 있다 — 타임아웃/형식 흔들림(예: 구글스칼라
+    // 캡처를 문자열만 나열). 온도 0은 동일 출력을 재생산하므로, 온도를 올리고 "name 필수·빠짐없이"
+    // 지시를 덧붙여 1회만 재시도한다. 텍스트 전용 문서는 supplementRoster(결정적)가 백업하므로 제외.
+    const hasImages = (input.imagePaths?.length ?? 0) > 0;
+    if (persons.length === 0 && hasImages) {
+      // eslint-disable-next-line no-console
+      console.warn(`[${this.name}] 비전 문서 0명 — 재시도(temp↑·name 강조): ${input.filename}`);
+      return extractFromVlmEndpoint(this.cfg, input, { temperature: 0.4, retryNudge: true });
+    }
+    return persons;
   }
 }

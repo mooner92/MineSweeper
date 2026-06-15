@@ -47,6 +47,11 @@ export interface RunOptions {
    * 워커가 네이티브 렌더러(render.ts)를 주입한다(앱/테스트엔 미주입 → 네이티브 의존성 분리).
    */
   renderPage?: (filepath: string, pageNumber: number) => Promise<string | null>;
+  /**
+   * 큰 이미지(5MP 캡처 등)를 VLM에 보내기 전 축소한다 — 비전 토큰 폭증으로 인한 타임아웃 방지.
+   * 워커가 render.ts 의 resizeImageToMax 를 주입(앱/테스트엔 미주입 → 원본 그대로). 실패 시 원본 유지.
+   */
+  normalizeImage?: (imagePath: string) => Promise<string | null>;
 }
 
 /** 한 문서에서 비전 OCR로 렌더할 무텍스트 페이지 최대 수(VLM 페이로드·지연 제한). */
@@ -112,6 +117,14 @@ export async function runPipeline(
       for (const p of imagePages) {
         const path = await options.renderPage(file.filepath, p.pageNumber);
         if (path) imagePaths.push(path);
+      }
+    }
+
+    // 큰 이미지(예: 5MP 구글스칼라 캡처, 또는 고해상 렌더 페이지)는 VLM 비전 토큰을 폭증시켜
+    // 요청이 멈추거나 타임아웃된다 — 보내기 전 최대 변 기준으로 축소(텍스트 가독성은 유지).
+    if (options.normalizeImage) {
+      for (let i = 0; i < imagePaths.length; i++) {
+        imagePaths[i] = (await options.normalizeImage(imagePaths[i])) ?? imagePaths[i];
       }
     }
 

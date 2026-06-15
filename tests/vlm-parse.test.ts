@@ -184,3 +184,37 @@ describe('buildTextWindow (입력 윈도우 — 앞/뒤 예산 분할)', () => {
     expect(out.endsWith('T'.repeat(10))).toBe(true); // END of document preserved (old code cut it)
   });
 });
+
+// h-지수(구글스칼라 캡처) 회복 — 모델이 객체 대신 문자열/대체키/중첩으로 줘도 회수(과거 18→0 원인).
+describe('parseVlmResponse — h-지수 변형 shape 회복', () => {
+  it('recovers a flat list of name STRINGS (구글스칼라 공저자 나열)', () => {
+    const r = parseVlmResponse(JSON.stringify({ persons: ['A Smith', 'Wei Chen', '홍길동'] }));
+    expect(r.persons.map((p) => p.name)).toEqual(['A Smith', 'Wei Chen', '홍길동']);
+    expect(r.dropped).toBe(0);
+  });
+
+  it('rejects junk strings (이름답지 않은 토큰) — 정확도 보호', () => {
+    const r = parseVlmResponse(JSON.stringify({ persons: ['garbage', 'lorem ipsum', 'B Jones'] }));
+    expect(r.persons.map((p) => p.name)).toEqual(['B Jones']); // 대문자 시작 이름만
+  });
+
+  it('recovers alternate name keys (author / full_name)', () => {
+    const r = parseVlmResponse(
+      JSON.stringify({ persons: [{ author: '김철수', role: 'coauthor' }, { full_name: 'Wei Chen' }] }),
+    );
+    expect(r.persons.map((p) => p.name)).toEqual(['김철수', 'Wei Chen']);
+    expect(r.dropped).toBe(0);
+  });
+
+  it('flattens per-paper nested author arrays into individual persons', () => {
+    const r = parseVlmResponse(
+      JSON.stringify({ persons: [{ title: 'paper A', authors: ['A Smith', 'C Wells'] }] }),
+    );
+    expect(r.persons.map((p) => p.name)).toEqual(['A Smith', 'C Wells']);
+  });
+
+  it('prefers a direct name over a nested list (named item is not dropped)', () => {
+    const r = parseVlmResponse(JSON.stringify({ persons: [{ name: 'Jane Doe', authors: ['X Y'] }] }));
+    expect(r.persons.map((p) => p.name)).toEqual(['Jane Doe']);
+  });
+});
