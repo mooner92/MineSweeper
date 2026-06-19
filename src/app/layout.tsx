@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
-      <body className="flex min-h-screen flex-col">
+      <body className="flex min-h-screen flex-col overflow-x-hidden">
         <header className="sticky top-0 z-10 border-b border-stroke bg-bg">
           <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between px-5 sm:px-6 xl:px-10 2xl:px-14">
             <Link href="/" className="text-lg font-bold text-fg no-underline">

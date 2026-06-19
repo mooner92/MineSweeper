@@ -34,7 +34,7 @@ export function StatCell({
       {/* 라벨(캡션) 먼저 — 맥락 제시 후 숫자를 읽도록. 토스식 위계. */}
       <p className="text-[11px] font-semibold tracking-wide text-fg-muted">{label}</p>
       <p className={`mt-1 text-3xl font-extrabold tabular-nums leading-none ${toneCls}`}>{value}</p>
-      {detail && <p className="mt-1.5 truncate text-xs leading-relaxed text-fg-subtle">{detail}</p>}
+      {detail && <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-fg-subtle">{detail}</p>}
     </div>
   );
 }
