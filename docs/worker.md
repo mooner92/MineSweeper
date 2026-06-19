@@ -245,7 +245,12 @@ export async function processApplicant(
 3. 각 문서를 `PipelineFile` 로 매핑(`filepath`, `folderCategory`, `documentId`)한 뒤 `runPipeline` 호출:
 
 ```ts
-const result = await runPipeline(files, { applicantName: applicant.name, extractor });
+const result = await runPipeline(files, {
+  applicantName: applicant.name,
+  extractor,
+  renderPage: await makeVisionRenderer(),
+  normalizeImage: await makeImageNormalizer(),  // 큰 캡처(5MP 등)를 VLM 입력 전 다운스케일
+});
 ```
 
 `applicantName` 을 넘기는 이유는 파이프라인이 **지원자 본인을 추출 결과에서 식별/제외**하기 위해서다(`isSelf`). 4단 파이프라인의 입출력은 [pipeline.md](./pipeline.md) 참고.
@@ -291,10 +296,10 @@ nameInitials: initialsForm(p.nameRaw),
 그리고 사람 단위로 사람 손이 필요한지 판정한다:
 
 ```ts
-const needsHuman = p.sourceKind !== 'printed' || p.confidence < HUMAN_REVIEW_CONFIDENCE;
+const needsHuman = computeNeedsHuman(p.sourceKind, p.confidence, { docType: doc.docType });
 ```
 
-`HUMAN_REVIEW_CONFIDENCE = 0.7`. 즉 **출력원이 인쇄가 아니거나(도장/손글씨/서명) 신뢰도가 0.7 미만**이면 사람 검토 대상이다. 이는 "자동추출은 초안, 최종판단은 사람"이라는 원칙을 코드로 박아둔 것이다.
+`computeNeedsHuman`(`src/lib/review-policy.ts`)이 docType·sourceKind·confidence를 함께 보고 결정한다. 인쇄(`printed`) 출처라도 `REVIEW_THRESHOLDS.printed` 미만의 신뢰도이면 검토 대상이 되고, 비인쇄(도장/손글씨/서명)는 곧장 검토 대상이며, **hindex(구글스칼라) 문서는 항상 `needsHuman = true`로 강제**된다. 이는 "자동추출은 초안, 최종판단은 사람"이라는 원칙을 코드로 박아둔 것이다.
 
 ### 단계 4: `flagForKind` — person-level 플래그
 
@@ -305,7 +310,8 @@ function flagForKind(sourceKind: SourceKind, confidence: number): FlagType | nul
   if (sourceKind === 'seal') return 'seal';
   if (sourceKind === 'handwritten') return 'handwriting';
   if (sourceKind === 'signature') return 'signature';
-  if (confidence < HUMAN_REVIEW_CONFIDENCE) return 'low_confidence';
+  // 여기는 printed 만 도달 — 카테고리 임계값으로 판정
+  if (confidence < REVIEW_THRESHOLDS.printed) return 'low_confidence';
   return null;
 }
 ```
@@ -322,7 +328,7 @@ function flagForKind(sourceKind: SourceKind, confidence: number): FlagType | nul
 
 판정 우선순위는 위에서 아래로다 — `sourceKind` 가 인쇄가 아니면 그 종류 플래그가 먼저 붙고, 인쇄일 때만 신뢰도로 `low_confidence` 를 본다. 반환이 `null` 이 아니면 `review_flags` 에 `personId`/`applicantId`/`documentId` 와 함께 `status: 'open'` 으로 insert 한다.
 
-> 참고: `FLAG_TYPES` union 에는 `ambiguous`(동명이인/약어) 도 있지만, 워커의 `flagForKind` 는 이를 생성하지 않는다. `ambiguous` 는 다른 경로(집계/리뷰)에서 쓰이는 값이다.
+> 참고: `flagForKind` 는 `ambiguous`(동명이인/약어) 를 생성하지 않는다. 그러나 `processApplicant` 는 집계(Aggregate) 결과를 `person_aggregates` 에 적재한 직후, `agg.nameCandidates.length > 1` 인 집합에 대해 정렬된 key로 dedupe 하며 `ambiguous` 플래그를 직접 삽입한다. 즉 `ambiguous` 도 워커 내부에서 생성되지만 `flagForKind` 가 아닌 person_aggregates 루프에서 만들어진다.
 
 ### 단계 5: `needs_vision` — document-level 플래그
 
@@ -346,13 +352,36 @@ if (needsVision && doc.persons.length === 0) {
 
 즉 텍스트 레이어가 없는 스캔 PDF, 이미지, HWP 처럼 텍스트로 뽑아낼 게 없는데 stub 추출기로는 이름을 못 건진 문서를 "사람이/비전으로 봐야 함"으로 표시한다. `label` 에는 ingest 단계의 메모(`doc.ingest.note`)를 그대로 넣어 검토자가 맥락을 본다. 이 플래그는 `personId` 가 없는 review_flag 다(아래 표 참고).
 
-### 단계 6: `person_aggregates` 적재
+### 단계 6: `detectMarksIfEnabled` — 도장·서명·손글씨 위치 검출 플래그
+
+`runPipeline` 이 끝난 직후, 트랜잭션 바깥에서 `detectMarksIfEnabled(result.documents)` 를 호출한다. `DETECT_MARKS=1` 이고 `VLM_MODEL` 이 설정된 경우에만 활성화된다(opt-in).
+
+이 함수는 `src/worker/detect-marks.ts` 의 `runMarkDetection` 을 동적 import 해서 각 문서의 관련 페이지를 렌더한 뒤, 로컬 VLM에 도장·서명·손글씨 **위치**를 물어본다(텍스트 추출이 아닌 위치 검출). 검출된 각 영역은 크롭 이미지(`cropPath`)와 함께 반환된다.
+
+`MARK_DOCTYPES`(기본 `degree_thesis`, `research_project`)에 포함된 문서 유형에서만 실행된다 — hindex·journal 등 인쇄 캡처 계열은 건너뛴다(인쇄 텍스트를 손글씨로 오검출하지 않도록). 어떤 오류가 발생해도 예외를 흡수하고 빈 Map 을 반환해 나머지 job 처리를 중단시키지 않는다.
+
+트랜잭션 안에서 검출된 mark 마다 `review_flags` 에 document-level 플래그를 삽입한다(`personId` 없음, `cropPath` 있음):
+
+```ts
+for (const mark of marksByDoc.get(doc.documentId) ?? []) {
+  await tx.insert(reviewFlags).values({
+    applicantId,
+    documentId: doc.documentId,
+    flagType: mark.type,   // 'seal' | 'handwriting' | 'signature'
+    cropPath: mark.cropPath ?? null,
+    label: `p.${mark.page}${pct}`,
+    status: 'open',
+  });
+}
+```
+
+### 단계 7: `person_aggregates` 적재
 
 마지막으로 4단(Aggregate) 결과를 지원자 단위로 적재한다. `canonicalName`, `nameNormalized`, `roles`(JSON `Role[]`), `sources`(JSON `SourceRef[]`), `affiliation`, `isSelf`, `needsHuman`, `finalStatus: 'pending'`. 이 테이블이 리뷰 UI 가 읽는 "지원자별 이해충돌 관계자 명단"이다.
 
-### `review_flags` 의 두 형태
+### `review_flags` 의 여러 형태
 
-`src/db/schema.ts` 주석대로 review_flag 는 두 가지 형태를 가진다 — `personId` 와 `documentId` 둘 다 nullable 이라 가능한 구조다:
+`src/db/schema.ts` 주석대로 review_flag 는 여러 형태를 가진다 — `personId`·`documentId` 가 모두 nullable 이라 person-level / document-level / aggregate-level 을 한 테이블에 담는다:
 
 ```ts
 // Either a person-level flag (seal/handwriting/...) or a document-level flag (needs_vision).
@@ -361,10 +390,12 @@ documentId: text('document_id').references(() => documents.id, { onDelete: 'casc
 applicantId: text('applicant_id').notNull()...,
 ```
 
-| 형태 | `personId` | `documentId` | `flagType` | 생성 위치 |
-| --- | --- | --- | --- | --- |
-| person-level | 있음 | 있음 | `seal`/`handwriting`/`signature`/`low_confidence` | `flagForKind` |
-| document-level | 없음(`null`) | 있음 | `needs_vision` | needsVision 분기 |
+| 형태 | `personId` | `documentId` | `flagType` | `cropPath` | 생성 위치 |
+| --- | --- | --- | --- | --- | --- |
+| person-level | 있음 | 있음 | `seal`/`handwriting`/`signature`/`low_confidence` | 없음 | `flagForKind` |
+| document-level (vision) | 없음(`null`) | 있음 | `needs_vision` | 없음 | needsVision 분기 |
+| document-level (mark) | 없음(`null`) | 있음 | `seal`/`handwriting`/`signature` | 있음(크롭 경로) | `detectMarksIfEnabled` 단계 |
+| aggregate-level | 없음(`null`) | 없음(`null`) | `ambiguous` | 없음 | person_aggregates 루프 |
 
 자세한 컬럼 정의와 관계는 [data-model.md](./data-model.md) 를 참고하라.
 

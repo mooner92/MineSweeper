@@ -406,7 +406,7 @@ export function vlmConfigFromEnv(): VlmConfig {
 ### 3.2 요청 — OpenAI 호환 `/chat/completions` + 이미지 첨부
 
 `extract()` 는 먼저 **문서유형별로 페이지를 고른 뒤**(`selectPagesForExtraction`) 텍스트를
-`buildTextWindow()` 로 조립한다(`VLM_MAX_TEXT_CHARS`, 기본 12000자).
+`buildTextWindow()` 로 조립한다(`VLM_MAX_TEXT_CHARS`, 기본 8000자).
 
 **`selectPagesForExtraction` — 왜 필요한가.** ingest 는 앞 N + 뒤 M 페이지를 모두 담아오지만, 저자는
 문서 **앞쪽**에만 있고 뒤 페이지(본문·참고문헌)는 노이즈다. 12쪽 논문 전체를 그대로 넣었더니 7B 모델이
@@ -535,7 +535,9 @@ const person: RawPerson = {
   nameRaw: p.name,
   role: roleFromLabel(p.role) ?? defaultRoleForDoc(input.docType),
   affiliation: p.affiliation,
-  sourceKind: normalizeSourceKind(p.sourceKind),
+  sourceKind: PRINTED_ONLY_DOCTYPES.has(input.docType)  // 인쇄 캡처(hindex)는 항상 printed
+    ? 'printed'
+    : normalizeSourceKind(p.sourceKind),
   sourcePage: p.page ?? 1,
   confidence: clamp01(p.confidence ?? 0.6),
   isSelf,
@@ -564,6 +566,11 @@ const person: RawPerson = {
 - **`defaultRoleForDoc(docType)`** — `degree_thesis` 면 `committee`, 그 외엔 `coauthor`.
 - **`normalizeSourceKind(s)`** (`util.ts`) — 소문자화 후 `SOURCE_KINDS`(`printed | handwritten | seal |
   signature`)에 있으면 그대로, 없으면 `printed` 폴백.
+- **`PRINTED_ONLY_DOCTYPES`** (`vlm.ts`) — 손글씨·도장·서명이 구조적으로 존재할 수 없는 인쇄 캡처 계열
+  문서유형 집합(현재 `{ hindex }`). 이 유형의 persons 는 VLM 이 돌려준 `source_kind` 값을 무시하고
+  무조건 `sourceKind: 'printed'` 로 고정한다. 구글스칼라 h-지수 캡처의 공저자 이름을 VLM 이
+  `'handwritten'` 으로 오분류해 잘못된 손글씨 검토 플래그(`flagForKind`)가 생기던 버그를 차단한다.
+  hindex 는 여전히 `computeNeedsHuman` 에 의해 `needsHuman`(`'확인 필수'`)로 검토 큐에 오른다.
 - **`clamp01(n)`** (`util.ts`) — NaN 은 0, 그 외 `[0,1]` 로 클램프. confidence 기본 0.6.
 
 ### 3.5 본인(self) 태깅 (VLM)
@@ -800,7 +807,7 @@ stub 은 GPU 없이 즉시 동작하지만, 스캔/이미지 문서(특히 `hind
 | GPU/모델 | 불필요 | 온프레 OpenAI 호환 엔드포인트 |
 | 결정론 | 예 | `temperature: 0` (모델 의존) |
 | 테스트 사용 | 예(유일) | 파싱/윈도우 헬퍼만 단위테스트(`tests/vlm-parse.test.ts`) |
-| 텍스트 처리 | 정규식 휴리스틱 | 프롬프트 + LLM, `VLM_MAX_TEXT_CHARS`(기본 12000자, 앞/뒤 분할) |
+| 텍스트 처리 | 정규식 휴리스틱 | 프롬프트 + LLM, `VLM_MAX_TEXT_CHARS`(기본 8000자, 앞/뒤 분할) |
 | 이미지/비전 | 불가(hindex → `[]`) | 가능(base64 첨부) |
 | confidence | 0.9(thesis) / 0.85(article) 고정 | 모델 값 `clamp01`, 기본 0.6 |
 | `evidence` | 채움(원문 라인) | 미채움 |

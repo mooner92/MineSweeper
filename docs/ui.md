@@ -114,28 +114,26 @@ const people = aggregates.filter((a) => !a.isSelf);
 const self = aggregates.filter((a) => a.isSelf);
 ```
 
-- **헤더**: 지원자명, `관계자 {people.length}명 · 문서 {documents.length}건`, `job` 이 있으면 `· 추출 {job.status}`.
+- **헤더**: 지원자명 + 지원번호(externalId), 검토 필요 건수 배지, 한 줄 안내, `문서 {documents.length}건`, job 상태 인디케이터.
   우측에 내보내기 버튼 두 개:
   - `CSV` → `/api/export/{applicant.id}?format=csv` (`seed-btn-neutral`)
   - `Excel 내보내기` → `/api/export/{applicant.id}?format=xlsx` (`seed-btn-primary`)
-- **본인 제외 알림**: `self.length > 0` 이면 회색 카드로
-  `본인 자동 제외: {self.map((s) => s.canonicalName).join(', ')}`. 지원자 본인은 관계자 표에서 빠지고
-  여기 별도로 표시된다(이름을 지어내지 않듯, 본인도 임의로 섞지 않는다).
+- **헤더 아래 StepStrip**: `① 수동 확인 → ② 관계자 검토 → ③ 제척 확정 → ④ 면접위원 초빙` 앵커 링크 스트립. 건수가 있는 단계만 색으로 강조(warning/danger), 목표 단계는 accent.
+- **본인 소속 표시**: `selfAffsClean.length > 0` 이면 헤더 안에 동일소속 판정 기준 소속기관을 `seed-badge-neutral` 로 표시한다. 지원자 본인은 관계자 표에서 자동 제외된다(별도 회색 "본인 자동 제외" 카드는 제거됨).
 
-**관계자 표** (`min-w-[720px]`, 가로 스크롤). 컬럼:
+**관계자 표** — 좌측 필터 사이드바(상태: 검토 필요/제척/동일소속 + 역할)와 클라이언트 검색 인풋으로 좁힌 뒤 보여준다(서버 `?view=`/`?q=` 칩에서 클라이언트 체크박스 상태로 이관). 필터·검색이 없으면 역할별 `<details>` 접이식 그룹으로 묶는다. 컬럼:
 
 | 컬럼 | 내용 | 컴포넌트/필드 |
 |---|---|---|
-| 이름 | `p.canonicalName` | 굵게 |
-| 역할 | 역할 배지들 | `<RoleBadges roles={p.roles} />` |
-| 소속 | `p.affiliation ?? '—'` | 회색 |
-| 출처 | 문서별 링크 + evidence | `p.sources` 매핑 |
-| 상태 | 신뢰도 배지 + 최종상태 배지 | `<ConfidenceBadge>` + `<FinalStatusBadge>` |
+| (chevron) | 행 토글 버튼 | 클릭하면 상세 패널 펼침/접음 |
+| 이름 | `p.canonicalName` | 굵게; 동명이인 후보가 있으면 후보 병기 |
+| 역할 | `ROLE_LABELS_KO` 를 `·` 로 이은 텍스트 | `<RoleBadges roles={p.roles} />` (compact 기본) |
+| 상태 | 제척·동일소속·신뢰도·최종상태 배지 | `<ConfidenceBadge>` + `<FinalStatusBadge>` 등 |
 | (액션) | 확인/수정/제외 | `<PersonActions>` |
 
-people 이 0이면 `colSpan={6}` 으로 "추출된 관계자가 없습니다." 를 가운데 정렬한다.
+소속·출처는 열에서 빠지고 **행 토글 상세 패널**(`PersonDetail`) 안으로 옮겨졌다(소속, 출처, 그리고 제척이면 전문가 풀 일치 상세). 결과가 0명이면 표 대신 안내 문구를 가운데 정렬로 보여준다.
 
-**출처 링크 + evidence 스니펫** — 각 `source` 는 원문 파일로 새 탭 링크되고, 호버 `title` 로 근거를 보여준다.
+**출처 링크 + evidence 스니펫** — 출처는 관계자 표의 열이 아니라 **행 토글 상세 패널**(`PersonDetail`)의 "출처" 섹션에 렌더된다. 각 `source` 는 원문 파일로 새 탭 링크되고, 호버 `title` 로 근거를 보여준다.
 
 ```tsx
 {p.sources.map((s, i) => (
@@ -145,7 +143,7 @@ people 이 0이면 `colSpan={6}` 으로 "추출된 관계자가 없습니다." �
     target="_blank"
     rel="noreferrer"
     title={s.evidence ?? s.filename}
-    className="mr-2 inline-block whitespace-nowrap underline-offset-2 hover:underline"
+    className="whitespace-nowrap text-info underline-offset-2 hover:underline"
   >
     {DOC_TYPE_LABELS_KO[s.docType]} p.{s.page}
   </a>
@@ -166,17 +164,22 @@ export interface SourceRef {
 }
 ```
 
-**초록 '자동 통과' / 노랑 '미확인' 배지** — 상태 셀은 두 배지를 세로로 쌓는다.
+**노랑 '미확인' 배지** — 상태 셀은 제척·동일소속·신뢰도·최종상태 배지를 `flex-col items-start` 로 쌓는다(`PersonRow`).
 
 ```tsx
-<td className="space-y-1 px-4 py-3">
-  <ConfidenceBadge needsHuman={p.needsHuman} />
-  <FinalStatusBadge status={p.finalStatus} />
+<td className="px-3 py-3">
+  <div className="flex flex-col items-start gap-1">
+    {conflicted && <span className="seed-badge-danger">제척</span>}
+    {sameAff[p.id] && <span className="seed-badge-warning">동일소속</span>}
+    <ConfidenceBadge needsHuman={p.needsHuman} />
+    <FinalStatusBadge status={p.finalStatus} />
+  </div>
 </td>
 ```
 
-- `ConfidenceBadge`: `needsHuman` 이 `false` 면 초록 **자동 통과**, `true` 면 노랑 **미확인** (§2.3).
+- `ConfidenceBadge`: `needsHuman=true` 일 때만 노랑 **미확인** 을 렌더하고, `false` 면 `null`(배지 없음 — 초록 '자동 통과' 배지 제거, §2.3).
 - `FinalStatusBadge`: 사람이 손댄 결과(`confirmed`/`rejected`/`edited`). `pending` 이면 아무것도 안 그린다.
+- `block` 대신 `flex-col items-start` 를 쓰는 이유: 배지가 내용 너비만 차지하게 해, 넓어진 상태 열을 가득 채워 빨강이 형광펜처럼 칠해지는 것을 막는다.
 
 **정렬 규칙**(서버 쿼리, §4): `isSelf → needsHuman DESC → canonicalName`. 즉 본인 다음에 *손이 필요한*
 사람이 위로, 그 안에서 가나다순. 검토자가 위에서부터 처리하면 애매한 것부터 끝난다.
@@ -184,33 +187,37 @@ export interface SourceRef {
 **문서 섹션**: 하단에 `documents` 를 `sm:grid-cols-2` 카드로 — 파일명(truncate) + 문서유형 배지
 (`seed-badge-neutral`, `DOC_TYPE_LABELS_KO[d.docType]`).
 
-### 1.4 검토 필요 큐 — `src/app/review-queue/page.tsx`
+### 1.4 검토 필요 큐 — `src/app/review-queue/page.tsx` (+ `board.tsx`)
 
 이 화면이 "애매한 것 모아보기"의 실체다. `getReviewQueue()` 로 *열린*(`status='open'`) 플래그 전부를 받아온다.
 
-```tsx
-const all = await getReviewQueue();
-const activeFlag = searchParams.flag ?? 'all';
-const items = activeFlag === 'all' ? all : all.filter((it) => it.flag.flagType === activeFlag);
-```
+`getReviewQueue()` 로 서버에서 전체 큐 항목을 가져온 뒤 `<ReviewQueueBoard>`(클라이언트 컴포넌트, `src/app/review-queue/board.tsx`)에 통째로 넘긴다(`page.tsx` 는 데이터 패칭만 하는 서버 컴포넌트).
 
-- **헤더 설명**: "도장·손글씨·판독난해 서명·비전 판독 필요 항목을 한 곳에 모았습니다. ({items.length})".
-- **내보내기**: 우측 `리스트 내보내기 (CSV)` — 현재 필터를 쿼리에 실어 보낸다.
+**좌측 필터 사이드바**(당근마켓 스타일, `lg:sticky`) — 서버 URL 파라미터 칩이 아니라 **클라이언트 상태** 기반 다중 선택 체크박스다.
 
-  ```tsx
-  const exportHref = activeFlag === 'all'
-    ? '/api/review-queue/export'
-    : `/api/review-queue/export?flag=${encodeURIComponent(activeFlag)}`;
-  ```
-
-**flagType 필터 칩** — *실제로 존재하는* 플래그 타입에서만 칩을 만든다(없는 타입은 칩도 없음).
+- **유형** 그룹: `flagType` 별 체크박스(카운트 표시). 그룹 내 OR.
+- **지원자** 그룹: `applicantId` 별 체크박스(지원자명 표시, 카운트 내림차순). 그룹 내 OR.
+- 그룹 간 AND, 즉시(클라이언트) 필터링, 초기화 버튼 제공. 카운트는 전체 모집단 기준 고정(필터를 바꿔도 옵션 카운트가 깜빡이지 않음).
 
 ```tsx
-const present = Array.from(new Set(all.map((it) => it.flag.flagType))) as FlagType[];
+// board.tsx 핵심 필터 로직 — 그룹 내 OR, 그룹 간 AND
+const filtered = items.filter(
+  (it) =>
+    (flagSel.size === 0 || flagSel.has(it.flag.flagType)) &&
+    (appSel.size === 0 || appSel.has(it.applicantId)),
+);
 ```
 
-`전체` 칩 + 타입별 칩이 모두 `?flag=` URL 검색파라미터로 동작하는 `<Link>` 다(클라이언트 상태 없음, 서버
-필터). 라벨은 `FLAG_TYPE_LABELS_KO`, 각 칩에 건수를 표시한다.
+**내보내기**: 유형을 정확히 하나 골랐을 때만 `?flag=` 파라미터를 붙이고, 그 외(다중·없음)에는 전체를 내보낸다(지원자 필터는 내보내기에 반영되지 않음).
+
+```tsx
+const exportHref =
+  flagSel.size === 1
+    ? `/api/review-queue/export?flag=${encodeURIComponent([...flagSel][0])}`
+    : '/api/review-queue/export';
+```
+
+유형 라벨은 `FLAG_TYPE_LABELS_KO`:
 
 | flagType | 라벨(`FLAG_TYPE_LABELS_KO`) |
 |---|---|
@@ -220,21 +227,6 @@ const present = Array.from(new Set(all.map((it) => it.flag.flagType))) as FlagTy
 | `low_confidence` | 저신뢰 |
 | `ambiguous` | 동명이인/약어 |
 | `needs_vision` | 비전 판독 필요 |
-
-칩 자체는 페이지 하단 헬퍼 컴포넌트다. 활성 칩은 캐럿 액센트로 강조한다.
-
-```tsx
-function FilterChip({ label, href, active, count }) {
-  return (
-    <Link
-      href={href}
-      className={`no-underline ${active ? 'seed-badge bg-accent text-fg-oncolor' : 'seed-badge-neutral'}`}
-    >
-      {label} {count}
-    </Link>
-  );
-}
-```
 
 **카드 그리드** (`sm:grid-cols-2 lg:grid-cols-3`). 각 카드 위쪽은 `aspect-[4/3]` 미리보기 영역.
 
@@ -347,14 +339,13 @@ async function act(action: Action): Promise<void> {
 
 순수 표시용. `domain.ts` 의 라벨맵을 그대로 쓴다.
 
-**`ConfidenceBadge`** — 신뢰도(자동) 게이트.
+**`ConfidenceBadge`** — 신뢰도(자동) 게이트. `needsHuman=true` 일 때만 노랑 **미확인** 을 렌더하고, `false` 면 `null`(배지 없음) — 해피패스 행의 시각 노이즈를 없애기 위함.
 
 ```tsx
-/** Green = auto-pass (printed/high-confidence); yellow = unverified (needs human). */
+/** Yellow = unverified (needs human); null = auto-pass (no badge). */
 export function ConfidenceBadge({ needsHuman }: { needsHuman: boolean }) {
-  return needsHuman
-    ? <span className="seed-badge-warning">미확인</span>
-    : <span className="seed-badge-success">자동 통과</span>;
+  if (!needsHuman) return null;
+  return <span className="seed-badge-warning">미확인</span>;
 }
 ```
 
@@ -366,10 +357,13 @@ const STATUS_LABEL: Record<ReviewStatus, string> = {
 };
 ```
 
-`pending` 은 `null` 반환(미개입 시 배지 없음). `confirmed`→초록, `rejected`→빨강, `edited`→중립.
+`pending` 은 `null` 반환(미개입 시 배지 없음). `confirmed`→중립(`seed-badge-neutral`, 초록은 실제 문제 신호용으로 예약), `rejected`→빨강(`seed-badge-danger`), `edited`→중립.
 
-**`RoleBadges`** — `Role[]` 를 `seed-badge-neutral` 로 나열, `ROLE_LABELS_KO` 로 한국어화. 한 사람이 여러
-역할(역할 합집합)일 수 있어 `flex flex-wrap gap-1` 로 줄바꿈.
+**`RoleBadges`** — `compact` prop(기본 `true`)에 따라 두 가지로 렌더한다.
+- `compact=true`(테이블 기본): 역할을 `·` 구분 텍스트 한 줄(`text-xs text-fg-muted`)로 — 박스 배지 없음.
+- `compact=false`: 기존 박스 배지(`seed-badge-neutral`, `flex flex-wrap gap-1`).
+
+`ROLE_LABELS_KO` 로 한국어화하며, 관계자 표는 `compact=true` 가 기본이라 역할 배지 박스가 보이지 않는다.
 
 | 역할(`Role`) | 라벨 | | 역할 | 라벨 |
 |---|---|---|---|---|
@@ -380,7 +374,7 @@ const STATUS_LABEL: Record<ReviewStatus, string> = {
 | `principal_investigator` | 책임자 | | `research_staff` | 참여연구진 |
 
 > 두 배지 축은 직교한다. `ConfidenceBadge`(자동 신뢰도) ↔ `FinalStatusBadge`(사람 결정)는 서로 다른 정보다.
-> 노랑 "미확인"이라도 사람이 "확정"하면 초록 "확정" 배지가 함께 붙는다.
+> 노랑 "미확인"이라도 사람이 "확정"하면 중립 "확정" 배지가 함께 붙는다.
 
 ---
 
@@ -406,7 +400,7 @@ globals.css :root          tailwind.config.ts colors        사용처
 
 | 그룹 | CSS 변수 | 값 | 의도 |
 |---|---|---|---|
-| **캐럿 액센트** | `--seed-accent` | `#ff6f0f` | 브랜드/활성 강조(필터 칩, bbox 오버레이) |
+| **액센트** | `--seed-accent` | `#00b48d` | 브랜드/활성 강조(활성 필터·체크박스, bbox 오버레이) |
 | | `--seed-accent-pressed` | `#e25e00` | primary 버튼 hover |
 | | `--seed-accent-subtle` | `#fff2e8` | 옅은 액센트 배경 |
 | **중립 레이어** | `--seed-bg` | `#ffffff` | 카드/표면 |
@@ -447,14 +441,14 @@ globals.css :root          tailwind.config.ts colors        사용처
 색 체계 자체가 트리아지를 표현한다.
 
 ```
-초록(success)  자동 통과 · 확정 · 검토 가능   → 사람이 안 봐도 되는 안전 신호
-노랑(warning)  미확인 · 검토 필요 큐 · flag   → "여기 좀 봐주세요"
-빨강(danger)   제외(rejected)                  → 명단에서 뺀 결과
-캐럿(accent)   활성 필터 · bbox 오버레이       → 지금 보고 있는 위치
-중립(neutral)  역할 · 문서유형 · 메타          → 판단과 무관한 사실
+초록(success)  검토 가능(홈 카드) · 그룹 전원 자동 통과 배지  → 사람이 안 봐도 되는 안전 신호
+노랑(warning)  미확인 · 검토 필요 큐 · flag · 동일소속        → "여기 좀 봐주세요"
+빨강(danger)   제외(rejected) · 제척(conflict)                → 명단에서 뺐거나 제척 대상
+액센트(accent) 활성 필터 · 체크박스 · bbox 오버레이           → 지금 보고 있는 위치
+중립(neutral)  역할 · 문서유형 · 확정(confirmed) · 메타       → 판단과 무관한 사실 또는 사람이 확정한 결과
 ```
 
-- **쉬운 건 자동 통과**: 인쇄·고신뢰 항목은 `needsHuman=false` → 초록 "자동 통과". 굳이 큐로 보내지 않는다.
+- **쉬운 건 자동 통과**: 인쇄·고신뢰 항목은 `needsHuman=false` → `ConfidenceBadge` 가 배지를 렌더하지 않는다(노이즈 제거). 굳이 큐로 보내지 않는다.
 - **애매한 건 모아보기**: 도장/손글씨/판독난해 서명/저신뢰/동명이인/비전필요는 플래그로 떨어져
   **검토 필요 큐**에 모이고, bbox 크롭으로 "어디를 봐야 하는지"까지 짚어준다.
 

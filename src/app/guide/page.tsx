@@ -31,8 +31,8 @@ export default function GuidePage() {
       <Section title="2. 지원자별 검토">
         <Bullets
           items={[
-            <>관계자가 <strong>관계 유형(지도교수·심사위원·공저자·연구진…)별로 묶여</strong> 보이고, 상단 <strong>필터 칩(전체 / 검토 필요 / 역할별)</strong>으로 좁혀 볼 수 있습니다.</>,
-            <>상태 배지: <span className="font-semibold text-success">초록 “자동 통과”</span>(인쇄·고신뢰) / <span className="font-semibold text-warning">노랑 “미확인”</span>(비인쇄·저신뢰 → 꼭 확인).</>,
+            <>관계자가 <strong>관계 유형(지도교수·심사위원·공저자·연구진…)별로 묶여</strong> 보이고, 좌측 <strong>필터 사이드바의 체크박스</strong>(상태: 검토 필요·제척·동일소속 / 역할별)로 좁혀 볼 수 있습니다. 이름·소속 <strong>검색</strong>도 지원합니다.</>,
+            <>상태 배지: <span className="font-semibold text-warning">노랑 “미확인”</span>(비인쇄·저신뢰 → 꼭 확인). 인쇄·고신뢰 항목은 배지 없이 표시됩니다(기존 초록 “자동 통과” 배지 제거).</>,
             '각 항목은 확인 / 수정 / 제외할 수 있고, 교정 내역이 기록됩니다.',
             <><strong>동명이인/약어 후보</strong>(예: 정민 / 정민호)는 자동 병합하지 않고 후보를 병기해 사람이 선택합니다.</>,
             '본인은 자동 제외됩니다(영문명으로만 적힌 본인은 수동 제외가 필요할 수 있음).',

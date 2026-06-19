@@ -376,6 +376,27 @@ export function getExtractor(mode: string = process.env.EXTRACTOR_MODE ?? 'stub'
 }
 ```
 
+#### `sourceKind` 강제 override — `PRINTED_ONLY_DOCTYPES`
+
+VLM 추출기는 문서유형이 `PRINTED_ONLY_DOCTYPES`(`src/lib/pipeline/extract/vlm.ts`)에 속하면
+VLM이 분류한 `sourceKind` 를 무시하고 항상 `'printed'` 로 덮어쓴다.
+
+```ts
+// src/lib/pipeline/extract/vlm.ts
+const PRINTED_ONLY_DOCTYPES = new Set<DocType>(['hindex']);
+
+// extractFromVlmEndpoint 내부 — 인물 매핑 시점:
+sourceKind: PRINTED_ONLY_DOCTYPES.has(input.docType)
+  ? 'printed'
+  : normalizeSourceKind(p.sourceKind),
+```
+
+현재 집합: `{ hindex }`. 배경: 구글스칼라 h-지수 캡처는 인쇄된 스크린샷이라 손글씨·도장·서명이
+존재할 수 없는데, VLM이 공저자 이름 텍스트를 `'handwritten'`으로 오분류해 잘못된 `손글씨`
+검토 플래그(`flagForKind → 'handwriting'`)가 생기는 버그가 있었다. 이 override가 그 경로를
+차단한다. `hindex` 문서는 별도 정책(`computeNeedsHuman`)에 의해 여전히 `needsHuman: true`
+(확인 필수)로 처리되므로 검토 자체는 유지된다 — `sourceKind` 라벨만 정확해진다.
+
 Stage 3 의 출력 `RawPerson[]` 은 오케스트레이터가 문서 출처(`documentId`, `filename`, `docType`)를
 덧붙여 `PersonWithSource[]` 로 만든 뒤 Stage 4 에 넘긴다.
 
