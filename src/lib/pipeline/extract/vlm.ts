@@ -274,6 +274,15 @@ const RETRY_NUDGE =
   '각 사람은 반드시 {"name":"이름"} 객체 하나로 출력하고(약어형 G Hong 도 name 에 그대로), ' +
   '이름만 문자열로 나열하거나 논문 아래 authors 배열로 중첩하지 마라.';
 
+/**
+ * 인쇄 캡처 계열 문서 — 손글씨·도장·서명이 존재할 수 없는 인쇄 스크린샷/출판물. VLM이 이런 문서의
+ * 인쇄 텍스트(예: 구글스칼라 h-지수 캡처의 공저자 이름)를 'handwritten'으로 오분류해 잘못된 '손글씨'
+ * 검토 플래그가 생기던 버그를 차단한다 — 이 docType의 인물 sourceKind는 무조건 'printed'로 둔다.
+ * (hindex는 어차피 '확인 필수'로 needsHuman 처리되므로 검토는 유지되고, 라벨만 정확해진다.)
+ * 확장 가능: DETECT 없이 인쇄만인 유형을 추가하려면 여기에. Tunable via PRINTED_ONLY_DOCTYPES env 없음(코드 고정).
+ */
+const PRINTED_ONLY_DOCTYPES = new Set<DocType>(['hindex']);
+
 export async function extractFromVlmEndpoint(
   cfg: VlmConfig,
   input: ExtractInput,
@@ -362,7 +371,11 @@ export async function extractFromVlmEndpoint(
       nameRaw: p.name,
       role: roleFromLabel(p.role) ?? defaultRoleForDoc(input.docType),
       affiliation: p.affiliation,
-      sourceKind: normalizeSourceKind(p.sourceKind),
+      // 인쇄 캡처 계열(구글스칼라 등)은 손글씨·도장·서명이 없다 — VLM 오분류로 잘못된 '손글씨'
+      // 플래그가 생기지 않도록 무조건 printed로 둔다(아래 PRINTED_ONLY_DOCTYPES 참고).
+      sourceKind: PRINTED_ONLY_DOCTYPES.has(input.docType)
+        ? 'printed'
+        : normalizeSourceKind(p.sourceKind),
       sourcePage: p.page ?? 1,
       confidence: clamp01(p.confidence ?? 0.6),
       isSelf,
