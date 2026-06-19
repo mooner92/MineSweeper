@@ -52,9 +52,31 @@ function IconGuide() {
   );
 }
 
+function IconInvite() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="6" cy="5" r="2.2" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M1.5 13c0-2.2 2-4 4.5-4s4.5 1.8 4.5 4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M11 6.5l1.4 1.4L15 5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 const ITEMS = [
   { href: '/', label: '지원자', Icon: IconApplicants },
   { href: '/review-queue', label: '검토 필요 큐', Icon: IconQueue },
+  { href: '/rounds', label: '면접위원 섭외', Icon: IconInvite },
   { href: '/guide', label: '사용 안내', Icon: IconGuide },
 ];
 
