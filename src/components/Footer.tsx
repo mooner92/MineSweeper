@@ -17,11 +17,16 @@ function GitHubMark({ className }: { className?: string }) {
 
 export function Footer() {
   return (
-    <footer className="mt-12 border-t border-stroke bg-bg">
+    <footer className="mt-12 border-t border-stroke bg-bg-layer">
       <div className="mx-auto max-w-screen-2xl space-y-6 px-5 py-8 sm:px-6 xl:px-10 2xl:px-14">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1 text-sm">
-            <p className="font-bold text-fg">⛏️ {SITE.name}</p>
+            <p className="flex items-center gap-2 font-bold text-fg">
+              <span className="ms-logo-chip h-[22px] w-[22px] text-xs" aria-hidden>
+                ⛏
+              </span>
+              {SITE.name}
+            </p>
             <p className="text-fg-subtle">{SITE.tagline}</p>
             <p className="text-fg-subtle">
               문의{' '}

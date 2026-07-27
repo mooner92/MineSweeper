@@ -176,7 +176,7 @@ export function InvitePanel({
 
   return (
     <section className="seed-card overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-stroke bg-bg-layer/60 px-4 py-2.5 text-sm">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-stroke bg-bg-elevated/60 px-4 py-2.5 text-sm">
         <span className="font-semibold text-fg">
           면접위원 초빙 <span className="font-normal text-fg-subtle">— 풀에서 골라 담기</span>
         </span>
@@ -241,7 +241,7 @@ export function InvitePanel({
                 const fields = fieldSummary(e.fields, dae, mid);
                 return (
                   <li key={e.id} className="flex items-center gap-2.5 py-2">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-layer text-xs font-bold text-fg-muted">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg-elevated text-xs font-bold text-fg-muted">
                       {avatarChar(e.name)}
                     </div>
                     <div className="min-w-0 flex-1">

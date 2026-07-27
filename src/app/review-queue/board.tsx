@@ -63,8 +63,9 @@ export function ReviewQueueBoard({ items }: { items: QueueItem[] }) {
             <span aria-hidden className="text-stroke-strong">/</span>
             <span className="font-medium text-fg" aria-current="page">검토 필요 큐</span>
           </nav>
+          <p className="ms-eyebrow">사람이 눈으로 봐야 하는 것</p>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">검토 필요 큐</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">검토 필요 큐</h1>
             {filtered.length > 0 && <span className="seed-badge-warning">{filtered.length}건</span>}
           </div>
           <p className="text-sm text-fg-muted">
@@ -188,7 +189,7 @@ function FilterGroup({
   if (facets.length === 0) return null;
   return (
     <div className="mt-4 border-t border-stroke pt-3 first:mt-3">
-      <p className="mb-2 text-xs font-semibold text-fg-muted">{title}</p>
+      <p className="ms-eyebrow mb-2">{title}</p>
       <ul className={scroll ? 'max-h-64 space-y-0.5 overflow-y-auto pr-1' : 'space-y-0.5'}>
         {facets.map((f) => {
           const active = selected.has(f.key);
@@ -196,7 +197,7 @@ function FilterGroup({
             <li key={f.key}>
               <label
                 className={`flex cursor-pointer items-center gap-2 rounded-seed px-2 py-1.5 text-sm transition-colors ${
-                  active ? 'bg-accent-subtle text-fg' : 'text-fg-muted hover:bg-bg-layer hover:text-fg'
+                  active ? 'bg-accent-subtle text-fg' : 'text-fg-muted hover:bg-bg-elevated hover:text-fg'
                 }`}
               >
                 <input
@@ -221,12 +222,12 @@ function FilterGroup({
 /** 큐 카드 한 장 — 동명이인(후보 비교)과 도장·서명·이미지(크롭 미리보기)를 분기 렌더. */
 function QueueCard({ item: it }: { item: QueueItem }) {
   return (
-    <li className="seed-card overflow-hidden transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-sm">
+    <li className="seed-card overflow-hidden transition-transform duration-150 hover:-translate-y-0.5">
       {it.flag.flagType === 'ambiguous' && it.candidates ? (
         // 동명이인/약어: 후보 이름별로 원문 파일·페이지 링크를 나열해 비교하게 한다.
         <div>
           {/* 헤더 바 — 이미지 카드와 동일한 패턴으로 통일(배지 위치 일관성) */}
-          <div className="flex items-center justify-between gap-2 border-b border-stroke bg-bg-layer px-3 py-2">
+          <div className="flex items-center justify-between gap-2 border-b border-stroke bg-bg-elevated px-3 py-2">
             <span className="seed-badge-warning">{FLAG_TYPE_LABELS_KO.ambiguous}</span>
             <span className="text-xs font-medium text-fg-muted">
               {it.applicantName ? (
@@ -270,7 +271,7 @@ function QueueCard({ item: it }: { item: QueueItem }) {
                             />
                           ) : (
                             // HWP 등 렌더 불가 포맷 — 깨진 이미지 대신 깔끔한 타일(원문 열기).
-                            <div className="flex h-40 w-28 flex-col items-center justify-center gap-1 rounded-seed border border-stroke bg-bg-layer p-2 text-center">
+                            <div className="flex h-40 w-28 flex-col items-center justify-center gap-1 rounded-seed border border-stroke bg-bg-elevated p-2 text-center">
                               <span className="text-2xl">📄</span>
                               <span className="text-xs font-semibold uppercase text-fg-muted">
                                 {s.sourceFormat}
@@ -280,7 +281,7 @@ function QueueCard({ item: it }: { item: QueueItem }) {
                                   {s.filename}
                                 </span>
                               )}
-                              <span className="text-xs font-medium text-accent">원문 보기</span>
+                              <span className="text-xs font-medium text-info">원문 보기</span>
                             </div>
                           )}
                           <span className="mt-0.5 block text-center text-xs text-fg-muted">
@@ -297,47 +298,51 @@ function QueueCard({ item: it }: { item: QueueItem }) {
         </div>
       ) : (
         <>
-          <div className="relative aspect-[4/3] bg-bg-layer">
-            {/* 플래그 유형 배지 — 이미지 위 절대 위치, 갤러리 스캔 시 유형 먼저 인식 */}
-            <span className="absolute left-2 top-2 z-10 seed-badge-warning shadow-sm">
-              {FLAG_TYPE_LABELS_KO[it.flag.flagType]}
-            </span>
-            {it.flag.cropPath ? (
-              // Detected seal/signature region — show the crop directly (human eyeballs it).
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={`/api/crop/${it.flag.id}`}
-                alt="detected region"
-                className="h-full w-full object-contain"
-              />
-            ) : it.documentId && it.sourceFormat === 'image' ? (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+          {/* 보여 줄 이미지가 있을 때만 4:3 리세스를 잡는다 — 없으면 빈 상자가 갤러리를 지배한다. */}
+          {it.flag.cropPath || (it.documentId && it.sourceFormat === 'image') ? (
+            <div className="relative aspect-[4/3] border-b border-stroke bg-bg-layer">
+              {/* 플래그 유형 배지 — 이미지 위 절대 위치, 갤러리 스캔 시 유형 먼저 인식 */}
+              <span className="absolute left-2 top-2 z-10 seed-badge-warning">
+                {FLAG_TYPE_LABELS_KO[it.flag.flagType]}
+              </span>
+              {it.flag.cropPath ? (
+                // Detected seal/signature region — show the crop directly (human eyeballs it).
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={`/api/file/${it.documentId}`}
-                  alt={it.filename ?? ''}
+                  src={`/api/crop/${it.flag.id}`}
+                  alt="detected region"
                   className="h-full w-full object-contain"
                 />
-                {it.bbox && (
-                  // Crop overlay: outline the extracted region over the source image.
-                  <div
-                    className="pointer-events-none absolute border-2 border-accent"
-                    style={{
-                      left: `${it.bbox.x * 100}%`,
-                      top: `${it.bbox.y * 100}%`,
-                      width: `${it.bbox.w * 100}%`,
-                      height: `${it.bbox.h * 100}%`,
-                      backgroundColor: 'color-mix(in srgb, var(--seed-warning) 18%, transparent)',
-                    }}
+              ) : (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/file/${it.documentId}`}
+                    alt={it.filename ?? ''}
+                    className="h-full w-full object-contain"
                   />
-                )}
-              </>
-            ) : (
-              <div className="flex h-full items-center justify-center text-xs text-fg-subtle">
-                미리보기 없음
-              </div>
-            )}
-          </div>
+                  {it.bbox && (
+                    // Crop overlay: outline the extracted region over the source image.
+                    <div
+                      className="pointer-events-none absolute border-2 border-accent"
+                      style={{
+                        left: `${it.bbox.x * 100}%`,
+                        top: `${it.bbox.y * 100}%`,
+                        width: `${it.bbox.w * 100}%`,
+                        height: `${it.bbox.h * 100}%`,
+                        backgroundColor: 'color-mix(in srgb, var(--seed-warning) 18%, transparent)',
+                      }}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2 border-b border-stroke bg-bg-elevated px-3 py-2.5">
+              <span className="seed-badge-warning">{FLAG_TYPE_LABELS_KO[it.flag.flagType]}</span>
+              <span className="text-xs text-fg-subtle">미리보기 없음 — 원문에서 확인</span>
+            </div>
+          )}
           <div className="space-y-1 p-3">
             <div className="flex items-center justify-between gap-2">
               {/* 지원자 이름 — 갤러리 스캔 시 맥락 식별의 핵심 */}
@@ -352,7 +357,7 @@ function QueueCard({ item: it }: { item: QueueItem }) {
               </p>
               {it.documentId && (
                 <a
-                  className="shrink-0 text-xs text-fg-muted hover:text-fg transition-colors"
+                  className="shrink-0 text-xs font-medium text-info hover:text-info/80 transition-colors"
                   href={`/api/file/${it.documentId}`}
                   target="_blank"
                   rel="noreferrer"

@@ -2,8 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Pretendard 자체 호스팅(가변 폰트). 외부 CDN 없이 /public 에서 서빙 — 온프레 원칙 유지.
-   토스 실제 폰트(Toss Product Sans)는 비공개라, 한국 핀테크의 오픈(OFL) 대안 Pretendard를 쓴다. */
+/* Pretendard 자체 호스팅(가변 폰트). 외부 CDN 없이 /public 에서 서빙 — 온프레 원칙 유지. */
 @font-face {
   font-family: 'Pretendard';
   src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
@@ -12,72 +11,114 @@
   font-display: swap;
 }
 
-/* KEI 브랜드 시맨틱 토큰 (라이트). 브랜드색: 그린 #00B48D(primary), 블루 #00A4E0(info), 그레이 #80817E.
-   상세 규칙은 docs/design-system.md. 컴포넌트는 이 토큰만 참조하므로 색 변경은 여기서만 한다. */
+/* ─────────────────────────────────────────────────────────────────────────────
+   HashiCorp-계열 다크 캔버스 시스템 (docs/design-system.md · 2026-07 리디자인).
+   축 3개: 테마(html.dark) × 액센트(html[data-accent]) × 상태색(ok/warn/err).
+   - 표면은 그림자 대신 "서피스 리프트"(canvas → s1 → s2)로 위계를 만든다.
+   - 경계선은 1px 반투명 헤어라인 — 보이되 경쟁하지 않는다.
+   - 액센트는 장식이 아니라 정체성 토큰: 한 화면에 한 색. 기본 Vault 옐로.
+   컴포넌트는 시맨틱 토큰(bg/fg/stroke/accent/…)만 참조한다 — 색 변경은 여기서만.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* 라이트 테마 (html.dark 없을 때). 표면 반전: 흰 캔버스 위 옅은 차콜 카드. */
 :root {
-  --seed-bg: #ffffff;
-  --seed-bg-layer: #f0f1f0; /* 카드 헤더 배경 — 본문 흰색과 대비 강화 */
-  --seed-bg-elevated: #ffffff;
-  --seed-fg: #1b1c1b;
-  --seed-fg-muted: #565756;
-  --seed-fg-subtle: #6b6c6a; /* KEI 그레이 — #80817e에서 조정, 흰 배경 대비 5.2:1(AA 통과) */
-  --seed-fg-oncolor: #ffffff;
-  --seed-stroke: #dddedd; /* 행 구분선 강화(#e7e8e7→#dddedd) */
-  --seed-stroke-strong: #c2c4c2; /* hover 테두리 강화 */
-  --seed-accent: #00b48d; /* KEI 그린 — primary */
-  --seed-accent-pressed: #009b79;
-  --seed-accent-subtle: #e1f6f0;
-  --seed-info: #00a4e0; /* KEI 블루 — 보조/정보 */
-  --seed-info-subtle: #e2f4fc;
-  --seed-success: #0e9f6e; /* 통과/완료 — 브랜드 그린 계열 */
-  --seed-success-subtle: #e3f5ee;
-  --seed-warning: #8f5c00; /* 주의·로딩 — 앰버 (#a66b00→#8f5c00: warning-subtle 위 대비 ~5.8:1) */
-  --seed-warning-subtle: #fff5e0;
-  --seed-danger: #d92d20; /* 중단·제척 — 레드 */
-  --seed-danger-subtle: #fdeceb;
+  --seed-bg: #f5f6f7; /* s1 — 카드 표면 */
+  --seed-bg-layer: #ffffff; /* canvas — 페이지 배경 */
+  --seed-bg-elevated: #ebedf0; /* s2 — 표 헤더·호버·중첩 표면 */
+  --seed-bg-raised: #d7dade; /* s3 — 칩·키캡 */
+  --seed-fg: #14181f; /* ink */
+  --seed-fg-muted: #565b64;
+  --seed-fg-subtle: #767b85; /* 흰 배경 대비 4.5:1 — 캡션·아이브로 */
+  --seed-fg-oncolor: #ffffff; /* danger 등 진한 단색 위 텍스트 */
+  --seed-stroke: rgba(59, 61, 69, 0.16); /* hairline */
+  --seed-stroke-strong: #c9ccd2;
+  --seed-info: #1f78e8; /* 링크·정보 (흰 배경 대비 보정) */
+  --seed-info-subtle: rgba(43, 137, 255, 0.12);
+  --seed-success: #0a8f66; /* 라이트에서 대비 확보 (mockup R8) */
+  --seed-success-subtle: rgba(0, 140, 98, 0.12);
+  --seed-warning: #bb5a00;
+  --seed-warning-subtle: rgba(187, 90, 0, 0.12);
+  --seed-danger: #c22318;
+  --seed-danger-subtle: rgba(230, 43, 30, 0.1);
   --seed-font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
     'Malgun Gothic', system-ui, sans-serif;
 }
 
-/* 다크 테마 — html.dark 일 때 같은 시맨틱 토큰을 어두운 값으로 재정의(컴포넌트는 손대지 않음).
-   브랜드 그린/블루는 어두운 배경에서 또렷하도록 한 단계 밝게 보정. */
+/* 다크 테마 (기본) — 블랙 캔버스, 차콜 카드, 흰 잉크. */
 .dark {
-  --seed-bg: #17191a;
-  --seed-bg-layer: #1f2122;
-  --seed-bg-elevated: #26292a;
-  --seed-fg: #f3f5f4;
-  --seed-fg-muted: #b0b3b1;
-  --seed-fg-subtle: #9a9b99; /* 다크 배경(#17191a) 대비 5.8:1 확보 */
+  --seed-bg: #15181e; /* s1 */
+  --seed-bg-layer: #0a0b0d; /* canvas — 순흑 대신 반스텝 (OLED 스미어·번인 완화) */
+  --seed-bg-elevated: #1f232b; /* s2 */
+  --seed-bg-raised: #3b3d45; /* s3 — 칩·키캡 */
+  --seed-fg: #ffffff;
+  --seed-fg-muted: #b2b6bd;
+  --seed-fg-subtle: #737a86; /* mockup #656a76에서 반스텝 밝게 — s1 위 4.5:1 */
   --seed-fg-oncolor: #ffffff;
-  --seed-stroke: #333536; /* 다크 행 구분선 강화 */
-  --seed-stroke-strong: #484b4c;
-  --seed-accent: #1ec9a3; /* KEI 그린(다크 보정) */
-  --seed-accent-pressed: #00b48d;
-  --seed-accent-subtle: #10302a;
-  --seed-info: #38b6e8; /* KEI 블루(다크 보정) */
-  --seed-info-subtle: #102a36;
-  --seed-success: #3fcf7f;
-  --seed-success-subtle: #14301f;
-  --seed-warning: #e0a23c;
-  --seed-warning-subtle: #382a10;
-  --seed-danger: #f5685c;
-  --seed-danger-subtle: #3a1714;
+  --seed-stroke: rgba(178, 182, 189, 0.14);
+  --seed-stroke-strong: #3b3d45;
+  --seed-info: #2b89ff;
+  --seed-info-subtle: rgba(43, 137, 255, 0.14);
+  --seed-success: #00ca8e; /* Nomad 그린 */
+  --seed-success-subtle: rgba(0, 202, 142, 0.13);
+  --seed-warning: #ffcf25; /* Vault 옐로 */
+  --seed-warning-subtle: rgba(255, 207, 37, 0.13);
+  --seed-danger: #ef4b3f; /* #e62b1e에서 반스텝 밝게 — 다크 표면 4.5:1 */
+  --seed-danger-subtle: rgba(230, 43, 30, 0.15);
   color-scheme: dark;
+}
+
+/* 액센트 축 — 제품 정체성 토큰(테마 무관). 기본 Vault. localStorage 'accent'로 전환 가능. */
+:root,
+html[data-accent='vault'] {
+  --seed-accent: #ffcf25;
+  --seed-accent-fg: #14181f; /* 옐로 위 텍스트는 항상 검정 */
+  --seed-accent-pressed: #eebf0f;
+  --seed-accent-subtle: rgba(255, 207, 37, 0.14);
+}
+html[data-accent='boundary'] {
+  --seed-accent: #f24c53;
+  --seed-accent-fg: #ffffff;
+  --seed-accent-pressed: #d93840;
+  --seed-accent-subtle: rgba(242, 76, 83, 0.16);
+}
+html[data-accent='terraform'] {
+  --seed-accent: #911ced;
+  --seed-accent-fg: #ffffff;
+  --seed-accent-pressed: #7b16c9;
+  --seed-accent-subtle: rgba(145, 28, 237, 0.18);
+}
+html[data-accent='nomad'] {
+  --seed-accent: #00ca8e;
+  --seed-accent-fg: #04140f;
+  --seed-accent-pressed: #00b37e;
+  --seed-accent-subtle: rgba(0, 202, 142, 0.14);
 }
 
 @layer base {
   html {
     color-scheme: light;
   }
+  html.dark {
+    color-scheme: dark;
+  }
   body {
     @apply bg-bg-layer text-fg antialiased;
     font-family: var(--seed-font-sans);
-    line-height: 1.6; /* 한국어 기본 행간 — 브라우저 기본(1.2~1.4) 대비 가독성 개선 */
+    line-height: 1.6; /* 한국어 기본 행간 */
     word-break: keep-all; /* 한국어 어절 단위 줄바꿈 */
   }
   /* 테이블은 밀도 유지를 위해 행간을 본문보다 타이트하게 */
   table {
     line-height: 1.45;
+  }
+  /* 디스플레이 타입: 타이트한 행간·음수 자간 (본문은 1.5+로 느슨하게 — 대비가 곧 보이스) */
+  h1 {
+    letter-spacing: -0.025em;
+    line-height: 1.19;
+  }
+  h2 {
+    letter-spacing: -0.015em;
+    line-height: 1.21;
   }
 }
 
@@ -90,13 +131,13 @@
     @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
   }
   .seed-btn-primary {
-    @apply seed-btn bg-accent text-fg-oncolor hover:bg-accent-pressed disabled:opacity-50;
+    @apply seed-btn bg-accent text-accent-fg hover:bg-accent-pressed disabled:opacity-50;
   }
   .seed-btn-neutral {
-    @apply seed-btn border border-stroke bg-bg text-fg hover:bg-bg-layer disabled:opacity-50;
+    @apply seed-btn border border-stroke bg-bg-elevated text-fg hover:border-stroke-strong disabled:opacity-50;
   }
   .seed-btn-ghost {
-    @apply seed-btn text-fg-muted hover:bg-bg-layer disabled:opacity-50;
+    @apply seed-btn text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50;
   }
   /* Form controls share the button focus ring + disabled treatment. */
   .seed-input {
@@ -114,13 +155,21 @@
     @apply seed-badge bg-warning-subtle text-warning;
   }
   .seed-badge-neutral {
-    @apply seed-badge border border-stroke bg-bg-layer text-fg-muted;
+    @apply seed-badge border border-stroke bg-bg-elevated text-fg-muted;
   }
   .seed-badge-danger {
     @apply seed-badge bg-danger-subtle text-danger;
   }
   .seed-badge-info {
     @apply seed-badge bg-info-subtle text-info;
+  }
+  /* 아이브로 — 모든 의미 있는 섹션 위에 붙는 카테고리 라벨 (12px·600·+.6px·대문자) */
+  .ms-eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.05em] text-fg-subtle;
+  }
+  /* 액센트 로고 칩 — 헤더·로그인·푸터 공용 */
+  .ms-logo-chip {
+    @apply grid shrink-0 place-items-center rounded-[6px] bg-accent text-accent-fg;
   }
 }
 
@@ -163,6 +212,20 @@
   animation: ms-stat-in 0.18s ease-out both;
 }
 
+/* 추출 중 펄스 — 상태 도트 공용 */
+@keyframes ms-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+.ms-pulse {
+  animation: ms-pulse 1.4s ease-in-out infinite;
+}
+
 /* details/summary 아코디언 아이콘 회전 duration 명시 */
 .ms-chevron {
   transition: transform 150ms ease-out;
@@ -183,6 +246,9 @@ details[open] .ms-chevron {
     animation: none;
   }
   .ms-overlay {
+    animation: none;
+  }
+  .ms-pulse {
     animation: none;
   }
 }

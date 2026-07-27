@@ -38,11 +38,12 @@ const OPTIONS: Array<{ v: Theme; label: string; icon: () => JSX.Element }> = [
 
 /** 밝게/어둡게/시스템 3단 토글. 선택은 localStorage에 저장되고, system 모드는 OS 변경을 추종한다. */
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>('system');
+  // 기본 dark — layout.tsx THEME_INIT과 같은 기본값(브랜드는 다크 캔버스).
+  const [theme, setTheme] = useState<Theme>('dark');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setTheme(((localStorage.getItem('theme') as Theme) || 'system'));
+    setTheme(((localStorage.getItem('theme') as Theme) || 'dark'));
     setMounted(true);
   }, []);
 
@@ -77,7 +78,7 @@ export function ThemeToggle() {
             aria-pressed={active}
             title={`테마: ${o.label}`}
             className={`flex h-7 w-7 items-center justify-center rounded-[7px] transition-colors ${
-              active ? 'bg-bg-layer text-fg' : 'text-fg-subtle hover:text-fg'
+              active ? 'bg-bg-elevated text-fg' : 'text-fg-subtle hover:text-fg'
             }`}
           >
             <Icon />

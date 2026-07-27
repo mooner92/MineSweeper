@@ -214,13 +214,17 @@ export default async function ApplicantPage({
               {applicant.name}
             </span>
           </nav>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">{applicant.name}</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-4xl font-semibold tracking-tight">{applicant.name}</h1>
             {applicant.externalId && (
-              <span className="text-sm text-fg-subtle">{applicant.externalId}</span>
+              <span className="inline-flex h-[26px] items-center rounded-full border border-stroke bg-bg px-2.5 text-[13px] font-medium text-fg-muted">
+                {applicant.externalId}
+              </span>
             )}
             {reviewCount > 0 && (
-              <span className="seed-badge-warning">검토 필요 {reviewCount}</span>
+              <span className="inline-flex h-[26px] items-center rounded-full bg-warning-subtle px-2.5 text-[13px] font-semibold text-warning">
+                검토 필요 {reviewCount}
+              </span>
             )}
           </div>
           {/* 첫 방문자 orientation — 이 페이지가 무엇을 하는 곳인지 한 줄로 */}
@@ -271,15 +275,22 @@ export default async function ApplicantPage({
         inviteReady={poolReady}
       />
 
-      {/* ── 핵심 수치 요약 ── */}
-      <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
-        <StatCell index={0} value={people.length} label="연관자" detail={roleSummary || undefined} />
+      {/* ── 핵심 수치 요약 — 하나의 카드 + border-r 구분 조인트 타일 ── */}
+      <section className="seed-card grid grid-cols-2 overflow-hidden sm:grid-cols-3 md:grid-cols-5">
+        <StatCell
+          index={0}
+          value={people.length}
+          label="연관자"
+          detail={roleSummary || undefined}
+          className="border-b border-r border-stroke md:border-b-0"
+        />
         <StatCell
           index={1}
           value={reviewCount}
           label="검토 필요"
           tone={reviewCount > 0 ? 'warning' : undefined}
           detail="동명이인 · 저신뢰 검출"
+          className="border-b border-stroke sm:border-r md:border-b-0"
         />
         <StatCell
           index={2}
@@ -287,6 +298,7 @@ export default async function ApplicantPage({
           label="동일소속(추정)"
           tone={sameAffMap.size > 0 ? 'warning' : undefined}
           detail="본인 소속과 같은 기관"
+          className="border-b border-r border-stroke sm:border-r-0 md:border-b-0 md:border-r"
         />
         <StatCell
           index={3}
@@ -300,6 +312,7 @@ export default async function ApplicantPage({
                 ? `확인 필요 ${conflicts.filter((c) => c.confidence === 'low').length}명 포함`
                 : `전문가 풀 ${poolCount.toLocaleString()}명 대조`
           }
+          className="border-b border-stroke sm:border-b-0 sm:border-r"
         />
         <StatCell
           index={4}
@@ -313,18 +326,18 @@ export default async function ApplicantPage({
       {manualCheck.length > 0 && (
         <section
           id="step-gate"
-          className="seed-card scroll-mt-20 overflow-hidden border-l-4 border-l-warning"
+          className="seed-card scroll-mt-20 overflow-hidden border-warning/40"
         >
           {/* 배지 행: icon + 배지만. 설명은 아래 별도 행으로 분리해 가독성 확보 */}
-          <div className="flex flex-wrap items-center gap-2 border-b border-stroke bg-warning-subtle px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-2 border-b border-stroke bg-warning-subtle/50 px-4 py-2.5">
             <span aria-hidden className="text-base">
               ⚠
             </span>
-            <span className="text-sm font-bold text-warning">
+            <span className="ms-eyebrow text-warning">
               수동 확인 필요 {manualCheck.length}건
             </span>
           </div>
-          <p className="border-b border-stroke bg-warning-subtle/40 px-4 py-2 text-xs text-fg-muted">
+          <p className="border-b border-stroke px-4 py-2 text-xs text-fg-muted">
             자동 추출이 0명이거나 스캔·이미지 문서입니다. 관련인은 모두 제척되므로, 빠진 관련인이
             없는지 원문을 직접 확인하세요.
           </p>
@@ -390,9 +403,8 @@ export default async function ApplicantPage({
       )}
 
       <section className="seed-card overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 border-b border-stroke bg-bg-layer px-4 py-2.5">
-          <span className="h-4 w-1 shrink-0 rounded-full bg-accent" aria-hidden />
-          <span className="text-[13px] font-bold tracking-[0.04em] text-fg">제출 문서</span>
+        <div className="flex flex-wrap items-center gap-2 border-b border-stroke bg-bg-elevated px-4 py-2.5">
+          <span className="ms-eyebrow">제출 문서</span>
           <span className="seed-badge-neutral">{documents.length}건</span>
           <span className="text-[11px] text-fg-subtle">
             — 유형별로 묶었습니다. 클릭하면 원문·검출 관계자를 나란히 봅니다.
@@ -479,9 +491,15 @@ function StepStrip({
   ];
   return (
     <nav
-      aria-label="검토 단계"
+      aria-labelledby="step-strip-label"
       className="seed-card flex items-center gap-1 overflow-x-auto px-2 py-1.5"
     >
+      <span
+        id="step-strip-label"
+        className="ms-eyebrow shrink-0 whitespace-nowrap border-r border-stroke py-1 pl-2 pr-3"
+      >
+        검토 단계
+      </span>
       {steps.map((s, i) => {
         const tone =
           s.attention === 'warning'
@@ -490,7 +508,7 @@ function StepStrip({
               ? { text: 'text-danger', dot: 'bg-danger-subtle text-danger' }
               : s.attention === 'goal'
                 ? { text: 'text-accent', dot: 'bg-accent-subtle text-accent' }
-                : { text: 'text-fg-muted', dot: 'bg-bg-layer text-fg-subtle' };
+                : { text: 'text-fg-muted', dot: 'bg-bg-elevated text-fg-subtle' };
         const inner = (
           <>
             <span
@@ -531,7 +549,7 @@ function StepStrip({
             {s.href ? (
               <a
                 href={s.href}
-                className="flex items-center gap-1.5 rounded-seed px-2 py-1 no-underline transition-colors hover:bg-bg-layer"
+                className="flex items-center gap-1.5 rounded-seed px-2 py-1 no-underline transition-colors hover:bg-bg-elevated"
               >
                 {inner}
               </a>

@@ -108,7 +108,7 @@ function FilterSidebar({
   const hasFilter = statusSel.size > 0 || roleSel.size > 0;
   const rowCls = (active: boolean) =>
     `flex cursor-pointer items-center gap-2 rounded-seed px-2 py-1.5 text-sm transition-colors ${
-      active ? 'bg-accent-subtle text-fg' : 'text-fg-muted hover:bg-bg-layer hover:text-fg'
+      active ? 'bg-accent-subtle text-fg' : 'text-fg-muted hover:bg-bg-elevated hover:text-fg'
     }`;
 
   return (
@@ -129,7 +129,7 @@ function FilterSidebar({
 
       {statusOptions.length > 0 && (
         <div className="mt-4 border-t border-stroke pt-3">
-          <p className="mb-2 text-xs font-semibold text-fg-muted">상태</p>
+          <p className="ms-eyebrow mb-2">상태</p>
           <ul className="space-y-0.5">
             {statusOptions.map((o) => {
               const active = statusSel.has(o.key);
@@ -158,7 +158,7 @@ function FilterSidebar({
 
       {roleOptions.length > 0 && (
         <div className="mt-4 border-t border-stroke pt-3">
-          <p className="mb-2 text-xs font-semibold text-fg-muted">역할</p>
+          <p className="ms-eyebrow mb-2">역할</p>
           <ul className="space-y-0.5">
             {roleOptions.map((o) => {
               const active = roleSel.has(o.role);
@@ -185,7 +185,7 @@ function FilterSidebar({
 
       {checks.length > 0 && (
         <div className="mt-4 border-t border-stroke pt-3">
-          <p className="mb-2 text-xs font-semibold text-fg-muted">자동 점검</p>
+          <p className="ms-eyebrow mb-2">자동 점검</p>
           <ul className="space-y-1.5">
             {checks.map((c) => (
               <li key={c.id} className="flex items-start gap-2 text-xs">
@@ -238,7 +238,7 @@ function PersonDetail({
     <div className="space-y-3 rounded-seed border border-stroke bg-bg p-3 text-sm">
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">소속</p>
+          <p className="ms-eyebrow">소속</p>
           <p className="mt-0.5 text-fg-muted">{p.affiliation ?? '—'}</p>
           {sameAffInst && (
             <p className="mt-0.5 text-xs text-warning">
@@ -247,7 +247,7 @@ function PersonDetail({
           )}
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">출처</p>
+          <p className="ms-eyebrow">출처</p>
           {p.sources.length === 0 ? (
             <p className="mt-0.5 text-xs text-fg-subtle">출처 없음</p>
           ) : (
@@ -343,9 +343,9 @@ function PersonRow({
     <>
       <tr
         onClick={() => setOpen((o) => !o)}
-        className="cursor-pointer align-top transition-colors duration-100 hover:bg-bg-layer/50"
+        className={`cursor-pointer align-top transition-colors duration-100 hover:bg-bg-elevated ${open ? 'bg-bg-elevated/60' : ''}`}
       >
-        <td className="py-3 pl-3 pr-1 align-middle">
+        <td className={`border-l-2 py-3 pl-3 pr-1 align-middle ${open ? 'border-l-accent' : 'border-l-transparent'}`}>
           <button
             type="button"
             aria-expanded={open}
@@ -354,7 +354,7 @@ function PersonRow({
               e.stopPropagation();
               setOpen((o) => !o);
             }}
-            className="flex h-6 w-6 items-center justify-center rounded-seed text-fg-subtle transition-colors hover:bg-bg-layer hover:text-fg"
+            className="flex h-6 w-6 items-center justify-center rounded-seed text-fg-subtle transition-colors hover:bg-bg-elevated hover:text-fg"
           >
             <svg
               aria-hidden
@@ -415,8 +415,8 @@ function PersonRow({
         </td>
       </tr>
       {open && (
-        <tr className="bg-bg-layer/30">
-          <td aria-hidden />
+        <tr className="bg-bg-elevated/60">
+          <td aria-hidden className="border-l-2 border-l-accent" />
           <td colSpan={4} className="px-2 pb-4 pr-3 pt-1">
             <PersonDetail p={p} sameAffInst={sameAff[p.id]} conflicts={conflicts} />
           </td>
@@ -446,12 +446,12 @@ function PeopleTable({
         <col className="w-[24%]" />
         <col />
       </colgroup>
-      <thead className="bg-bg-layer text-left">
+      <thead className="bg-bg-elevated text-left">
         <tr>
           <th className="py-2.5" aria-hidden />
-          <th className="px-2 py-2.5 text-[11px] font-bold tracking-wide text-fg-muted">이름</th>
-          <th className="px-3 py-2.5 text-[11px] font-bold tracking-wide text-fg-muted">역할</th>
-          <th className="px-3 py-2.5 text-[11px] font-bold tracking-wide text-fg-muted">상태</th>
+          <th className="px-2 py-2.5 text-xs font-semibold uppercase tracking-[0.05em] text-fg-subtle">이름</th>
+          <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.05em] text-fg-subtle">역할</th>
+          <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.05em] text-fg-subtle">상태</th>
           <th className="px-3 py-2.5" />
         </tr>
       </thead>
@@ -642,7 +642,7 @@ export function ApplicantReviewClient({
       {/* ── 메인 — 관계자 검토 표 ── */}
       <div className="min-w-0">
         <section className="seed-card overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 border-b border-stroke bg-bg-layer px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-2 border-b border-stroke bg-bg-elevated px-4 py-2.5">
             <span className="h-4 w-1 shrink-0 rounded-full bg-accent" aria-hidden />
             <span className="text-sm font-semibold text-fg">관계자 검토</span>
             <span className="text-xs text-fg-subtle">— 행을 클릭하면 소속·출처·제척 상세가 열립니다</span>
@@ -685,7 +685,7 @@ export function ApplicantReviewClient({
                       open={defaultOpen}
                       className="group"
                     >
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-l-[3px] border-l-accent px-4 py-3 transition-colors hover:bg-bg-layer/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-l-[3px] border-l-accent px-4 py-3 transition-colors hover:bg-bg-elevated/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
                         <span className="flex flex-wrap items-center gap-2 text-[13px] font-bold tracking-[0.04em] text-fg">
                           {g.role ? ROLE_LABELS_KO[g.role] : '기타'}
                           <span className="font-normal normal-case tracking-normal text-fg-subtle">

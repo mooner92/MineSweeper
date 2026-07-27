@@ -143,12 +143,12 @@ export function UploadForm() {
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
-        className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-seed-lg border-2 border-dashed px-6 py-8 text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+        className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-seed-lg border border-dashed px-6 py-8 text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
           dragOver
             ? 'border-accent bg-accent-subtle'
             : file
-              ? 'border-stroke-strong bg-bg-layer/50'
-              : 'border-stroke bg-bg-layer/30 hover:border-stroke-strong hover:bg-bg-layer/60'
+              ? 'border-stroke-strong bg-bg-elevated/50'
+              : 'border-stroke-strong bg-bg hover:bg-bg-elevated/60'
         } ${busy ? 'pointer-events-none opacity-60' : ''}`}
       >
         <input
@@ -170,7 +170,7 @@ export function UploadForm() {
           </>
         ) : (
           <>
-            <p className="text-sm font-semibold text-fg-muted">
+            <p className="text-sm font-semibold text-fg">
               zip 파일을 여기에 끌어다 놓거나 <span className="text-accent">클릭해서 선택</span>
             </p>
             <p className="text-xs text-fg-subtle">지원자 1명의 첨부서류 압축파일 (.zip)</p>
@@ -189,12 +189,13 @@ export function UploadForm() {
 
       {status && (
         <div className="space-y-1.5">
-          <p className="text-sm font-medium text-accent">
+          <p className="flex items-center gap-2 text-sm font-medium text-accent">
+            <span aria-hidden className="ms-pulse h-2 w-2 shrink-0 rounded-full bg-accent" />
             {status}
             {progress != null ? ` (${progress}%)` : ''}
           </p>
           {progress != null && (
-            <div className="h-2 w-full max-w-md overflow-hidden rounded-full bg-bg-layer">
+            <div className="h-2 w-full max-w-md overflow-hidden rounded-full bg-bg-elevated">
               <div
                 className="h-full rounded-full bg-accent transition-all duration-500"
                 style={{ width: `${Math.max(progress, 4)}%` }}

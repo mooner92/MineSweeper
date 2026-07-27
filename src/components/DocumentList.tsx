@@ -47,11 +47,11 @@ const FORMAT_GLYPH: Partial<Record<SourceFormat, { label: string; cls: string }>
   pdf: { label: 'PDF', cls: 'bg-danger-subtle text-danger' },
   image: { label: 'IMG', cls: 'bg-accent-subtle text-accent' },
   hwp: { label: 'HWP', cls: 'bg-success-subtle text-success' },
-  text: { label: 'TXT', cls: 'bg-bg-layer text-fg-muted' },
+  text: { label: 'TXT', cls: 'bg-bg-elevated text-fg-muted' },
 };
 
 function FormatGlyph({ format }: { format: SourceFormat }) {
-  const g = FORMAT_GLYPH[format] ?? { label: 'DOC', cls: 'bg-bg-layer text-fg-muted' };
+  const g = FORMAT_GLYPH[format] ?? { label: 'DOC', cls: 'bg-bg-elevated text-fg-muted' };
   return (
     <span
       aria-hidden
@@ -85,7 +85,7 @@ export function DocumentList({ items }: { items: DocItem[] }) {
           const warnCount = g.docs.filter((d) => d.zeroWarn).length;
           return (
             <details key={g.label} className="group seed-card overflow-hidden" open>
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-bg-layer/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-bg-elevated/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
                 <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-fg">
                   {g.label}
                   <span className="font-normal text-fg-subtle">{g.docs.length}건</span>
@@ -108,7 +108,7 @@ export function DocumentList({ items }: { items: DocItem[] }) {
                       <button
                         type="button"
                         onClick={() => setOpen(d)}
-                        className="group/row flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-bg-layer/50"
+                        className="group/row flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-bg-elevated/50"
                       >
                         <FormatGlyph format={d.format} />
                         <span className="min-w-0 flex-1">
@@ -246,13 +246,13 @@ function DocDrawer({ doc, onClose }: { doc: DocItem; onClose: () => void }) {
 
 // ── avatar ───────────────────────────────────────────────────────────────────
 // 이름 해시 기반 5색 파레트 — 동일 인물은 항상 같은 색.
-// KEI 브랜드(그린·블루·그레이) 조화 팔레트 — 사람 식별용 색 칩.
+// 시맨틱 토큰 팔레트(라이트·다크 자동 대응) — 사람 식별용 색 칩.
 const AVATAR_PALETTES = [
-  { bg: 'bg-[#e1f6f0]', text: 'text-[#00866a]', ring: 'ring-[#a9e5d6]' }, // 브랜드 그린
-  { bg: 'bg-[#e2f4fc]', text: 'text-[#0079a8]', ring: 'ring-[#a9ddf2]' }, // 브랜드 블루
-  { bg: 'bg-[#eef0ef]', text: 'text-[#5c5e5b]', ring: 'ring-[#d0d4d2]' }, // KEI 그레이
-  { bg: 'bg-[#e8f5ea]', text: 'text-[#2e7d54]', ring: 'ring-[#b8e0c4]' }, // 딥그린
-  { bg: 'bg-[#eef0ff]', text: 'text-[#4f5bd0]', ring: 'ring-[#cdd3f7]' }, // 인디고
+  { bg: 'bg-accent-subtle', text: 'text-accent', ring: 'ring-stroke' },
+  { bg: 'bg-info-subtle', text: 'text-info', ring: 'ring-stroke' },
+  { bg: 'bg-success-subtle', text: 'text-success', ring: 'ring-stroke' },
+  { bg: 'bg-warning-subtle', text: 'text-warning', ring: 'ring-stroke' },
+  { bg: 'bg-bg-elevated', text: 'text-fg-muted', ring: 'ring-stroke' },
 ] as const;
 
 function avatarPalette(name: string) {
@@ -287,7 +287,7 @@ function PeoplePanel({
 }) {
   return (
     <aside className="flex max-h-56 shrink-0 flex-col border-b border-stroke md:max-h-none md:w-80 md:border-b-0 md:border-r">
-      <header className="border-b border-stroke bg-bg-layer/60 px-4 py-2.5">
+      <header className="border-b border-stroke bg-bg-elevated/60 px-4 py-2.5">
         <p className="text-sm font-semibold text-fg">검출된 관계자 {people.length}명</p>
         <p className="mt-0.5 text-xs text-fg-subtle">
           {canJump
@@ -357,12 +357,12 @@ function PersonCard({
       }
       aria-pressed={canJump ? isActive : undefined}
       className={[
-        'relative mx-3 my-1.5 rounded-seed border border-l-2 bg-bg px-3 py-2.5 transition-all',
+        'seed-card relative mx-3 my-1.5 border-l-2 px-3 py-2.5 transition-all',
         isActive
-          ? 'border-stroke border-l-accent bg-accent-subtle/30'
-          : 'border-stroke border-l-transparent',
+          ? 'border-l-accent bg-accent-subtle/30'
+          : 'border-l-transparent',
         canJump
-          ? 'cursor-pointer hover:border-stroke-strong hover:border-l-accent/60 hover:bg-bg-layer/50 hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent'
+          ? 'cursor-pointer hover:border-stroke-strong hover:border-l-accent/60 hover:bg-bg-elevated/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent'
           : 'cursor-default',
         person.isSelf ? 'opacity-60' : '',
       ]
@@ -467,7 +467,7 @@ function PersonCard({
                   'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent',
                   activePage === pg
                     ? 'border-accent bg-accent-subtle text-accent'
-                    : 'border-stroke text-fg-muted hover:border-stroke-strong hover:bg-bg-layer',
+                    : 'border-stroke text-fg-muted hover:border-stroke-strong hover:bg-bg-elevated',
                 ].join(' ')}
               >
                 p.{pg}
@@ -487,7 +487,7 @@ function PersonCard({
       {/* ── 행 4: 근거 스니펫 (2줄 클램프, 전체 표시는 title로) ── */}
       {person.evidence && (
         <p
-          className="mt-1.5 line-clamp-2 rounded-seed bg-bg-layer px-2 py-1.5 text-[11px] leading-relaxed text-fg-muted"
+          className="mt-1.5 line-clamp-2 rounded-seed border-l-2 border-accent bg-bg-elevated px-2 py-1.5 text-[11px] leading-relaxed text-fg-muted"
           title={person.evidence}
         >
           &ldquo;{person.evidence}&rdquo;

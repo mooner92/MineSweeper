@@ -45,7 +45,7 @@ export function LoginForm() {
           autoComplete="username"
           required
           autoFocus
-          className="seed-input w-full py-2"
+          className="seed-input h-11 w-full"
         />
       </label>
       <label className="block space-y-1">
@@ -55,11 +55,11 @@ export function LoginForm() {
           type="password"
           autoComplete="current-password"
           required
-          className="seed-input w-full py-2"
+          className="seed-input h-11 w-full"
         />
       </label>
       {error && <p className="text-sm font-medium text-danger">{error}</p>}
-      <button type="submit" className="seed-btn-primary w-full" disabled={busy}>
+      <button type="submit" className="seed-btn-primary h-11 w-full" disabled={busy}>
         {busy ? '확인 중…' : '로그인'}
       </button>
     </form>

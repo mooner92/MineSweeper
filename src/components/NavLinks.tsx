@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 /* Inline SVG icons — no external icon library dependency. 16×16, currentColor. */
@@ -75,21 +75,39 @@ function IconInvite() {
 
 const ITEMS = [
   { href: '/', label: '지원자', Icon: IconApplicants },
-  { href: '/review-queue', label: '검토 필요 큐', Icon: IconQueue },
+  { href: '/review-queue', label: '검토 큐', Icon: IconQueue },
   { href: '/rounds', label: '면접위원 섭외', Icon: IconInvite },
-  { href: '/guide', label: '사용 안내', Icon: IconGuide },
+  { href: '/guide', label: '안내', Icon: IconGuide },
 ];
 
-/** Header nav with the current page highlighted (담당자가 지금 어디에 있는지 보이게). */
+/** 헤더 내비 — 현재 페이지는 서피스 리프트(s2 필)로 표시, '검토 큐'에는 열린 항목 수 배지. */
 export function NavLinks() {
   const pathname = usePathname();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  const [queueOpen, setQueueOpen] = useState<number | null>(null);
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' || pathname.startsWith('/applicants') : pathname.startsWith(href);
 
+  const onLogin = pathname === '/login';
+
+  // 검토 큐 배지 — 페이지 이동마다 갱신(검토 처리 후 돌아오면 줄어든 수가 보이도록).
+  useEffect(() => {
+    if (onLogin) return;
+    let alive = true;
+    fetch('/api/review-queue/count')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { open?: number } | null) => {
+        if (alive && j && typeof j.open === 'number') setQueueOpen(j.open);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [pathname, onLogin]);
+
   // 로그인 화면에서는 네비/로그아웃을 보여줄 이유가 없다.
-  if (pathname === '/login') return null;
+  if (onLogin) return null;
 
   async function logout(): Promise<void> {
     setSigningOut(true);
@@ -108,13 +126,16 @@ export function NavLinks() {
             href={it.href}
             aria-current={active ? 'page' : undefined}
             className={`no-underline ${
-              active
-                ? 'seed-btn bg-accent-subtle font-bold text-fg border-b-2 border-accent rounded-b-none'
-                : 'seed-btn-ghost font-medium'
+              active ? 'seed-btn bg-bg-elevated font-semibold text-fg' : 'seed-btn-ghost font-medium'
             }`}
           >
             <it.Icon />
             {it.label}
+            {it.href === '/review-queue' && queueOpen != null && queueOpen > 0 && (
+              <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-warning-subtle px-1.5 text-xs font-bold leading-none text-warning">
+                {queueOpen}
+              </span>
+            )}
           </Link>
         );
       })}

@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { DeleteApplicantButton } from '@/components/DeleteApplicantButton';
-import { Spinner } from '@/components/Spinner';
 import { StatCell } from '@/components/StatCell';
 import { UploadForm } from '@/components/UploadForm';
 import { getApplicants, type ApplicantSummary } from '@/lib/data';
@@ -34,47 +33,71 @@ export default async function HomePage() {
   });
   return (
     <div className="space-y-8">
+      {/* 히어로 — 아이브로 + 큰 제목 + 시스템 원칙 부제 (mockup R1) */}
+      <section className="space-y-2">
+        <p className="ms-eyebrow">채용 이해충돌 검토</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
+          지원자 제출자료 관계자 검토
+        </h1>
+        <p className="text-base text-fg-muted">자동 추출은 초안입니다 — 최종 판단은 담당자가 합니다.</p>
+      </section>
+
       {list.length > 0 && (
-        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCell index={0} value={list.length} label="지원자" detail="제출자료 분석" />
-          <StatCell
-            index={1}
-            value={totals.people}
-            label="식별 연관자"
-            detail="지도교수 · 심사위원 · 공저자 · 연구진"
-          />
-          <StatCell
-            index={2}
-            value={totals.needsHuman}
-            label="검토 필요"
-            tone={totals.needsHuman > 0 ? 'warning' : undefined}
-            detail="사람 확인 대기"
-          />
-          <StatCell
-            index={3}
-            value={totals.docs}
-            label="문서"
-            detail={
-              totals.running > 0
-                ? `추출 진행 중 ${totals.running}명`
-                : totals.errors > 0
-                  ? `추출 오류 ${totals.errors}명`
-                  : '전체 처리 완료'
-            }
-          />
+        <section className="space-y-3">
+          <p className="ms-eyebrow">전체 현황</p>
+          {/* 조인트 스탯 타일 — 하나의 카드 + border 구분 (applicants/[id]와 동일 패턴) */}
+          <div className="seed-card grid grid-cols-2 overflow-hidden sm:grid-cols-4">
+            <StatCell
+              index={0}
+              value={list.length}
+              label="지원자"
+              detail="제출자료 분석"
+              className="border-b border-r border-stroke sm:border-b-0"
+            />
+            <StatCell
+              index={1}
+              value={totals.people}
+              label="식별 연관자"
+              detail="지도교수 · 심사위원 · 공저자 · 연구진"
+              className="border-b border-stroke sm:border-b-0 sm:border-r"
+            />
+            <StatCell
+              index={2}
+              value={totals.needsHuman}
+              label="검토 필요"
+              tone={totals.needsHuman > 0 ? 'warning' : undefined}
+              detail="사람 확인 대기"
+              className="border-r border-stroke"
+            />
+            <StatCell
+              index={3}
+              value={totals.docs}
+              label="문서"
+              detail={
+                totals.running > 0
+                  ? `추출 진행 중 ${totals.running}명`
+                  : totals.errors > 0
+                    ? `추출 오류 ${totals.errors}명`
+                    : '전체 처리 완료'
+              }
+            />
+          </div>
         </section>
       )}
 
       {/* 업로드 섹션 — 주 액션임을 ring+스텝 번호로 강조. 다른 카드와 시각적으로 구분 */}
       <section className="seed-card overflow-hidden ring-1 ring-accent/25">
-        <div className="flex items-center gap-2.5 border-b border-stroke bg-bg-layer px-4 py-2.5">
+        <div className="flex items-center gap-3 border-b border-stroke bg-bg-elevated px-4 py-3">
           <span
-            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-bold leading-none text-fg-oncolor"
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-bold leading-none text-accent-fg"
             aria-hidden
           >
             1
           </span>
-          <h2 className="text-sm font-bold text-fg">지원자 ZIP 업로드</h2>
+          <div className="min-w-0">
+            <p className="ms-eyebrow">1지원자 = 1 ZIP · 같은 지원번호는 덮어씀</p>
+            <h2 className="text-xl font-semibold text-fg">지원자 ZIP 업로드</h2>
+          </div>
         </div>
         <div className="p-5">
           <p className="text-sm leading-6 text-fg-muted">
@@ -88,9 +111,12 @@ export default async function HomePage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-base font-semibold text-fg">
-          지원자 <span className="font-normal text-fg-muted">({list.length})</span>
-        </h2>
+        <div className="space-y-1">
+          <p className="ms-eyebrow">회차별 목록</p>
+          <h2 className="text-base font-semibold text-fg">
+            지원자 <span className="font-normal text-fg-muted">({list.length})</span>
+          </h2>
+        </div>
         {list.length === 0 ? (
           <div className="seed-card p-10 text-center">
             <p className="text-base text-fg-muted">아직 업로드된 지원자가 없습니다.</p>
@@ -100,7 +126,7 @@ export default async function HomePage() {
           <div className="space-y-2">
             {roundGroups.map(([round, apps]) => (
               <details key={round || 'none'} open className="group seed-card overflow-hidden">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-l-[3px] border-l-accent bg-bg-layer px-4 py-2.5 transition-colors hover:bg-bg-elevated focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-l-[3px] border-l-accent bg-bg-elevated px-4 py-2.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
                   <span className="flex flex-wrap items-center gap-2 text-[13px] font-bold tracking-[0.04em] text-fg">
                     회차 {round || '미상'}
                     <span className="font-normal normal-case tracking-normal text-fg-subtle">{apps.length}명</span>
@@ -129,13 +155,13 @@ export default async function HomePage() {
                         />
                         <Link
                           href={`/applicants/${a.id}`}
-                          className="seed-card block p-4 pl-5 pr-16 no-underline transition-all duration-150 hover:-translate-y-px hover:border-stroke-strong hover:bg-bg-layer/50 hover:shadow-sm"
+                          className="seed-card block p-4 pl-5 pr-16 no-underline transition-all duration-150 hover:-translate-y-px hover:border-stroke-strong hover:bg-bg-elevated/50"
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="truncate font-bold text-fg">{a.name}</span>
+                            <span className="truncate font-semibold text-fg">{a.name}</span>
                             {running ? (
                               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-info-subtle px-2 py-0.5 text-xs font-medium text-info">
-                                <Spinner className="h-3 w-3" />
+                                <span aria-hidden className="ms-pulse h-1.5 w-1.5 rounded-full bg-info" />
                                 추출 중
                               </span>
                             ) : a.jobStatus === 'error' ? (
