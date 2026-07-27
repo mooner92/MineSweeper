@@ -74,6 +74,17 @@ export function candidatesCsv(experts: Expert[]): string {
   return toCsv(AVAIL_HEADERS, experts.map(availRow));
 }
 
+/** 골라 담은 면접위원 명단(단일 시트) — 회차 섭외 결과 산출물. */
+export async function candidatesXlsxBuffer(experts: Expert[]): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('섭외 명단');
+  ws.addRow([...AVAIL_HEADERS]);
+  experts.forEach((e) => ws.addRow(availRow(e)));
+  ws.getRow(1).font = { bold: true };
+  ws.columns.forEach((c) => (c.width = 24));
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
 export function excludedCsv(conflicts: RoundConflict[]): string {
   return toCsv(EXCL_HEADERS, conflicts.map(exclRow));
 }

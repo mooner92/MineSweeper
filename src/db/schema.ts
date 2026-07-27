@@ -207,6 +207,39 @@ export const invitations = sqliteTable('invitations', {
   removedAt: integer('removed_at', { mode: 'timestamp' }),
 });
 
+/**
+ * 회차별 면접 감독관(면접위원 후보) 명단 — 전역 전문가 풀과 별개로, 한 회차에 대해 업로드한 xlsx
+ * (전문가 풀과 같은 포맷)을 저장한다. 회차 페이지는 그 회차의 명단이 있으면 그것을, 없으면 전역
+ * `experts` 풀을 대조 기준으로 쓴다. 재업로드 시 그 회차분 전체 교체. PII이므로 DB는 커밋 금지.
+ */
+export const roundExperts = sqliteTable(
+  'round_experts',
+  {
+    id: text('id').primaryKey().$defaultFn(uuid),
+    round: text('round').notNull(), // recruitmentRound (예: '0336'), 미상은 ''
+    name: text('name').notNull(),
+    nameKey: text('name_key').notNull(),
+    affiliation: text('affiliation'),
+    position: text('position'),
+    email: text('email'),
+    phone: text('phone'),
+    fields: text('fields', { mode: 'json' }).$type<ExpertField[]>().notNull().default([]),
+    registeredAt: text('registered_at'),
+    createdAt: createdAt(),
+  },
+  (t) => ({ roundIdx: index('round_experts_round_idx').on(t.round) }),
+);
+
+/** 회차별 명단 메타 — 업로드 파일명·인원수·적재시각(화면 표시·교체 추적용). 회차당 1행(upsert). */
+export const roundPools = sqliteTable('round_pools', {
+  round: text('round').primaryKey(),
+  filename: text('filename'),
+  count: integer('count').notNull().default(0),
+  uploadedAt: integer('uploaded_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 // --- relations (for the convenient db.query.* API used by the review UI) ---
 
 export const applicantsRelations = relations(applicants, ({ many }) => ({
@@ -255,3 +288,6 @@ export type Expert = typeof experts.$inferSelect;
 export type NewExpert = typeof experts.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
+export type RoundExpert = typeof roundExperts.$inferSelect;
+export type NewRoundExpert = typeof roundExperts.$inferInsert;
+export type RoundPool = typeof roundPools.$inferSelect;

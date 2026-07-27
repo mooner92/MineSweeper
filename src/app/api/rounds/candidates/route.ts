@@ -10,12 +10,14 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
+    round?: string;
     applicantIds?: unknown;
     dae?: string | null;
     mid?: string | null;
     q?: string | null;
     limit?: number;
   };
+  const round = typeof body.round === 'string' && body.round !== 'none' ? body.round : '';
   const applicantIds = Array.isArray(body.applicantIds)
     ? body.applicantIds.filter((x): x is string => typeof x === 'string')
     : [];
@@ -25,6 +27,7 @@ export async function POST(req: Request) {
       : 60;
 
   const view = await getRoundCandidates({
+    round,
     applicantIds,
     dae: body.dae ?? null,
     mid: body.mid ?? null,

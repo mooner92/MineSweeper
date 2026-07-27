@@ -1,6 +1,6 @@
 import { inArray, sql } from 'drizzle-orm';
 import { getDb } from '@/db/client';
-import { applicants, experts, jobs, personAggregates, type Expert } from '@/db/schema';
+import { applicants, jobs, personAggregates, type Expert, type RoundPool } from '@/db/schema';
 import {
   assembleConflicts,
   type CoiType,
@@ -9,7 +9,7 @@ import {
   type ExpertConflict,
 } from '@/lib/experts';
 import { filterExperts } from '@/lib/invite';
-import { nameKey } from '@/lib/names';
+import { getRoundPool } from '@/lib/round-pool';
 
 /**
  * 회차(또는 사용자가 고른 면접 진출자) 단위 제척·섭외 — 인사팀 실사용 흐름.
@@ -137,9 +137,16 @@ export function mergeRoundConflicts(
   );
 }
 
-/** 선택 지원자들의 관계자 × 현재 풀 → 전문가별 제척 합집합. 쿼리 2회(aggregates+experts). */
-export async function getRoundConflicts(applicantIds: string[]): Promise<RoundConflict[]> {
-  if (applicantIds.length === 0) return [];
+/**
+ * 선택 지원자들의 관계자 × 주어진 후보 풀(candidates) → 전문가별 제척 합집합.
+ * 풀은 호출부가 정한다 — 회차 전용 명단 또는 전역 전문가 풀(getRoundPool). assembleConflicts가
+ * candidates를 이름키로 내부 필터하므로 풀 전체를 넘겨도 정확하다.
+ */
+export async function getRoundConflicts(
+  applicantIds: string[],
+  candidates: Expert[],
+): Promise<RoundConflict[]> {
+  if (applicantIds.length === 0 || candidates.length === 0) return [];
   const db = getDb();
   const [apps, aggs] = await Promise.all([
     db
@@ -171,34 +178,22 @@ export async function getRoundConflicts(applicantIds: string[]): Promise<RoundCo
   }
   if (byApp.size === 0) return [];
 
-  // 이름키가 일치하는 풀 전문가만 한 번에 로드(전 지원자 공통).
-  const keys = [
-    ...new Set(
-      [...byApp.values()]
-        .flat()
-        .map((p) => nameKey(p.name))
-        .filter(Boolean),
-    ),
-  ];
-  const matched = keys.length
-    ? await db.select().from(experts).where(inArray(experts.nameKey, keys))
-    : [];
-
   return mergeRoundConflicts(
     [...byApp.entries()].map(([applicantId, persons]) => ({
       applicantId,
       applicantName: appName.get(applicantId) ?? applicantId,
-      conflicts: assembleConflicts(persons, matched),
+      conflicts: assembleConflicts(persons, candidates),
     })),
   );
 }
 
 /**
- * 통합 뷰 한 번 계산 — 제척 합집합(conflicts)과 섭외 가능 전문가(items)를 함께 반환한다.
- * conflicts 를 한 번만 계산해 두 패널·내보내기가 재사용한다(중복 쿼리 방지).
+ * 통합 뷰 한 번 계산 — 회차의 대조 기준 풀(회차 명단 또는 전역 폴백)을 로드해 제척 합집합과
+ * 섭외 가능 전문가를 함께 반환한다. conflicts는 한 번만 계산해 두 패널·내보내기가 재사용.
  * 섭외 가능 = 풀 − 제척 합집합, 분야(대/중)·이름·소속 검색 적용.
  */
 export async function getRoundCandidates(opts: {
+  round: string;
   applicantIds: string[];
   dae?: string | null;
   mid?: string | null;
@@ -210,14 +205,14 @@ export async function getRoundCandidates(opts: {
   total: number;
   excludedCount: number;
   poolTotal: number;
+  poolSource: 'round' | 'global';
+  poolMeta: RoundPool | null;
+  categories: Array<{ dae: string; mids: string[] }>;
 }> {
-  const db = getDb();
-  const [all, conflicts] = await Promise.all([
-    db.select().from(experts),
-    getRoundConflicts(opts.applicantIds),
-  ]);
+  const pool = await getRoundPool(opts.round);
+  const conflicts = await getRoundConflicts(opts.applicantIds, pool.experts);
   const conflictedIds = new Set(conflicts.map((c) => c.expert.id));
-  const { items, total } = filterExperts(all, {
+  const { items, total } = filterExperts(pool.experts, {
     invitedIds: new Set(),
     conflictedIds,
     dae: opts.dae,
@@ -225,5 +220,29 @@ export async function getRoundCandidates(opts: {
     q: opts.q,
     limit: opts.limit,
   });
-  return { conflicts, items, total, excludedCount: conflictedIds.size, poolTotal: all.length };
+  return {
+    conflicts,
+    items,
+    total,
+    excludedCount: conflictedIds.size,
+    poolTotal: pool.experts.length,
+    poolSource: pool.source,
+    poolMeta: pool.meta,
+    categories: poolCategories(pool.experts),
+  };
+}
+
+/** 활성 풀의 분야 분류체계(대분류 → 중분류) — 섭외 후보 분야 드롭다운용(회차 명단/전역 풀 둘 다). */
+function poolCategories(pool: Expert[]): Array<{ dae: string; mids: string[] }> {
+  const map = new Map<string, Set<string>>();
+  for (const e of pool) {
+    for (const f of e.fields) {
+      if (!f.dae) continue;
+      if (!map.has(f.dae)) map.set(f.dae, new Set());
+      if (f.mid) map.get(f.dae)!.add(f.mid);
+    }
+  }
+  return [...map]
+    .map(([dae, mids]) => ({ dae, mids: [...mids].sort((a, b) => a.localeCompare(b, 'ko')) }))
+    .sort((a, b) => a.dae.localeCompare(b.dae, 'ko'));
 }

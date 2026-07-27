@@ -11,7 +11,8 @@ export default async function RoundsPage() {
   return (
     <div className="space-y-5">
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">면접위원 섭외</h1>
+        <p className="ms-eyebrow">면접위원 섭외</p>
+        <h1 className="text-3xl font-semibold tracking-tight">회차별 제척 대조</h1>
         <p className="text-sm text-fg-muted">
           회차(또는 그 안에서 고른 서류 합격자)의 <strong>제척 대상을 합집합으로</strong> 전문가 풀에서
           제거하고, 남은 <strong>제척되지 않은 전문가</strong>를 면접위원 후보로 제시합니다.
@@ -43,7 +44,7 @@ export default async function RoundsPage() {
               <li key={key || 'none'}>
                 <Link
                   href={`/rounds/${encodeURIComponent(key || 'none')}`}
-                  className="seed-card flex items-center justify-between gap-3 p-4 no-underline transition-colors hover:border-accent/40 hover:bg-accent-subtle/20"
+                  className="seed-card flex items-center justify-between gap-3 p-4 no-underline transition-colors hover:border-stroke-strong"
                 >
                   <div className="min-w-0">
                     <p className="font-semibold text-fg">회차 {r.round ?? '미상'}</p>
